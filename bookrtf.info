@@ -1,0 +1,5 @@
+name = bookrtf
+description = Exports a book to rtf
+core = 7.x
+package = My Modules
+dependencies[] = book
