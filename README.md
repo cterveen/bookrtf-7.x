@@ -11,7 +11,7 @@ Currently it supports:
 - Links (tekst is shown, link is added to a footnote)
 - Basic markup: bold, italic, underlined, paragraphs, h3, newlines
 - Extended ASCII characters 0x80 - 0x96; 0xb0; 0xe0 -0xff
-- HTML characters: &nbsp; &amp;
+- HTML characters: &amp;nbsp; &amp;amp;
 
 
 
