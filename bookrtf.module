@@ -2,7 +2,7 @@
  
  /**
  * @file
- * A theme module that exports books as rtf
+ * A  module that exports books as rtf
  */
   
  
@@ -42,6 +42,9 @@ function bookrtf_menu() {
    return $items;
 }
 
+ /**
+ * Get the contents from print and, convert to RTF, save as file and show a download page.
+ */
 
 function _bookrtf_page($nid) {
   if (user_access('access content')) {
@@ -56,442 +59,7 @@ function _bookrtf_page($nid) {
         $file = "sites/gele-boekje.daventria.com/files/gele-boekje.rtf";
         $fileurl = "http://www.daventria.com/sites/gele-boekje.daventria.com/files/gele-boekje.rtf";
         
-$header = "\\rtf1\n";
-$header .= "\\vertdoc\\paperh16834\\paperw11909 ";
-$header .= "\\fet0 \\ftnrstpg\n";
-
-
-// CLEAN UP
-$content = preg_replace("|([\r\n]+)\s+|", "$1", $content);
-$content = preg_replace("|<\!DOCTYPE[^>]+>[\s\r\n]*|" , "", $content);
-$content = preg_replace("|<title>[^<]+</title>[\s\r\n]*|" , "", $content);
-$content = preg_replace("|</?html[^>]*>[\s\r\n]*|" , "", $content);
-$content = preg_replace("|<meta[^>]+>[\s\r\n]*|" , "", $content);
-$content = preg_replace("|<link[^>]+>[\s\r\n]*|" , "", $content);
-$content = preg_replace("|</?head>[\s\r\n]*|" , "", $content);
-$content = preg_replace("|</?body>[\s\r\n]*|" , "", $content);
-$content = preg_replace("|<\!--.+[\s\r\n]*|" , "", $content);
-$content = preg_replace("|</?div[^>]*>[\s\r\n]*|" , "", $content);
-
-// MARKUP
-$content = preg_replace("|<strong>|", "\\b ", $content);
-$content = preg_replace("|</strong>|", "\\b0 ", $content);
-$content = preg_replace("|<b>|", "\\b", $content);
-$content = preg_replace("|</b>|", "\\b0 ", $content);
-$content = preg_replace("|<u>|", "\\ul ", $content);
-$content = preg_replace("|</u>|", "\\ul0 ", $content);
-$content = preg_replace("|<i>|", "\\i ", $content);
-$content = preg_replace("|</i>|", "\\i0 ", $content);
-$content = preg_replace("|</?span[^>]*>|", "", $content);
-
-// PARAGRAPHS & NEWLINES
-$content = preg_replace("|<p>|", "\\par ", $content);
-$content = preg_replace("|</p>|", "", $content);
-$content = preg_replace("|<br( /)?>|", "\\line\n", $content);
-
-// LISTS
-$lists = array();
-$items = array();
-
-// get lists info
-$liststarts = array();
-$listends = array();
-$listitems = array();
-
-preg_match_all("|<[ou]l[^>]*>|", $content, $liststarts, PREG_OFFSET_CAPTURE);
-preg_match_all("|</[ou]l[^>]*>|", $content, $listends, PREG_OFFSET_CAPTURE);
-preg_match_all("|<li[^>]*>|", $content, $listitems, PREG_OFFSET_CAPTURE);
-
-for ($i = 0; $i < count($liststarts[0]); $i++) {
-  
-  if (substr($liststarts[0][$i][0], 0, 3) == "<ul") {
-    $lists[$i]['type'] = "ul";
-  }
-  else {
-    $lists[$i]['type'] = "ol";
-  }
-  
-  // get start position & length
-  $lists[$i]['start'] = $liststarts[0][$i][1];
-  $lists[$i]['startlength'] = strlen($liststarts[0][$i][0]);
-  
-  
-  if (!array_key_exists("level", $lists[$i])) {
-    $lists[$i]['level'] = 1;
-  }
-  
-  // get end
-  
-  $end = $listends[0][$i][1];
-  $endlength = strlen($listends[0][$i][0]);
-  
-  // get levels
-  for ($j = $i+1; $j < count($liststarts[0]); $j++) {
-    if ($liststarts[0][$j][1] < $end) {
-      # table $j is nested
-      if (array_key_exists($j, $lists)) {
-        $lists[$j]['level']++;
-      }
-      else {
-        $lists[$j]['level'] = 2;
-      }
-      $end = $listends[0][$j][1];
-      $endlength = strlen($listends[0][$j-1][0]);
-    }
-    else {
-      break;
-    }
-  }
-  $j -= 1;
-  if ($j > $i+1) {
-    $removed = array_splice($listends[0], $j, 1);
-    
-    array_splice($listends[0], $i, 0, $removed);
-  }
-  
-//   $lists[$j]['level']++;
-  
-  // get end position & length
-  $lists[$i]['end'] = $end;
-  $lists[$i]['endlength'] = $endlength;
-}
-
-
-// get listitems
-for ($i = 0; $i < count($listitems[0]); $i++) {
-  $start = $listitems[0][$i][1];
-  $length = strlen($listitems[0][$i][0]);
-  $lid = -1;
-  
-  for ($j = 0; $j < count($lists); $j++) {
-    if ($start > $lists[$j]['start'] and $start < $lists[$j]['end']) {
-      $lid = $j;
-    }
-  }
-  
-  $item = 1;
-  
-  for ($k = 0; $k < count($items); $k++) {
-    if ($items[$k]['lid'] == $lid) {
-      $item++;
-    }
-  }
-  
-  $array = array();
-  $array['start'] = $start;
-  $array['length'] = $length;
-  $array['type'] = $lists[$lid]['type'];
-  $array['lid'] = $lid;
-  $array['item'] = $item;
-  $array['level'] = $lists[$lid]['level'];
-  
-  array_unshift($items, $array);
-}
-
-// replace the html the dirty way: replace by tabs, bullets and numbers based on level and item.
-
-
-for ($i = 0; $i < count($items); $i++) {
-  $array = $items[$i];
-  $replace = "";
-  
-  $firstindent = -360;
-  $lineindent = 720 + 720 * ($array['level']-1);
-  
-  $replace .= "\\par\\fi" . $firstindent . "\\li". $lineindent;
-
-
-    
-  if ($array['type'] == "ul") {
-    $replace .= "\\bullet\\tab";
-  }
-  else {
-    $replace .= " " . $array['item'] . ".\\tab";
-  }
-  
-  $replace .= "\n";
-  
-  $content = substr_replace($content, $replace, $array['start'], $array['length']);
-}
-
-
-$content = preg_replace("|</?[ou]l[^>]*>|", "", $content);
-$content = preg_replace("|</li[^>]*>|", "\\pard", $content);
-
-// PAGES
-$content = preg_replace("|<h1[^>]*>|", "\\page \\fs32\\b ", $content);
-$content = preg_replace("|</h1>|", "\\b0\\fs24", $content);
-// no reason to start with a blank page
-$content = substr($content, 6);
-
-// LINKS
-// anchors, replace with index TODO
-$content = preg_replace("|<a[^>]* name=[^>]*>|", "", $content);
-
-
-// remove internal links
-$content = preg_replace("|<a[^>]*style=\"float: right\">(.*?)</a>|", "", $content);
-
-// replace external links and mailtos with footnote 
-$content = preg_replace("|<a[^>]* href=\"(http://[^\"]*)\"[^>]*>(.*?)</a>|", "$2{\\footnote \\\pard {\up6\chftn} $1}", $content);
-$content = preg_replace("|<a[^>]* href=\"mailto:([^\"]*)\"[^>]*>(.*?)</a>|", "$2{\\footnote \\\pard {\up6\chftn} $1}", $content);
-
-// TABLES
-$tables = array();
-$tablestarts = array();
-$tableends = array();
-preg_match_all("|<table[^>]*>|", $content, $tablestarts, PREG_OFFSET_CAPTURE);
-preg_match_all("|</table[^>]*>|", $content, $tableends, PREG_OFFSET_CAPTURE);
-
-
-for ($i = 0; $i < count($tablestarts[0]); $i++) {
-  $start = $tablestarts[0][$i][1];
-  $end = $tableends[0][$i][1] + strlen($tableends[0][$i][0]);
-  $length = $end - $start;
-  
-  array_unshift($tables, array("start" => $start, "end" => $end, "length" => $length, "rows" => array()));
-}
-
-$trows = array();
-$trowsstart = array();
-$trowsend = array();
-preg_match_all("|<tr[^>]*>|", $content, $trowsstart, PREG_OFFSET_CAPTURE);
-preg_match_all("|</tr>|", $content, $trowsend, PREG_OFFSET_CAPTURE);
-
-for ($i = 0; $i < count($trowsstart[0]); $i++) {
-  $start = $trowsstart[0][$i][1];
-  $length = strlen($trowsstart[0][$i][0]);
-  $end = $trowsend[0][$i][1];
-  $tid = -1;
-  
-  for ($j = 0; $j < count($tables); $j++) {
-    if ($start > $tables[$j]["start"] and $start < $tables[$j]["end"]) {
-      $tid = $j;
-      break;
-    }
-  }
-  
-  $html = substr($content, $start, $end-$start);
-  
-  $cells = array();
-  $cellstarts = array();
-  $cellends = array();
-  preg_match_all("|<t[dh][^>]*>|", $html, $cellstarts, PREG_OFFSET_CAPTURE);
-  preg_match_all("|</t[dh][^>]*>|", $html, $cellends, PREG_OFFSET_CAPTURE);
-  
-  for ($j = 0; $j < count($cellstarts[0]); $j++) {
-     $start = $cellstarts[0][$j][1] + strlen($cellstarts[0][$j][0]);
-     $end = $cellends[0][$j][1];
-     $length = $end - $start;
-     
-     $props = array();
-     $props["content"] = substr($html, $start, $length);
-     
-     preg_match("|colspan=\"(\d+)\"|", $cellstarts[0][$j][0], $matches);
-     if (array_key_exists(1, $matches)) {
-       $props['colspan'] = $matches[1][0];
-     }
-     
-     array_push($cells, $props);
-  }
-  
-  $cols = count($cells);
-  if (!array_key_exists("cols", $tables[$tid])) {
-    $tables[$tid]["cols"] = $cols;
-  }
-  else if ($cols > $tables[$tid]["cols"]) {
-    $tables[$tid]["cols"] = $cols;
-  }
-  
-  array_push($tables[$tid]["rows"], $cells);
-}
-
-for ($tid = 0; $tid < count($tables); $tid++) {
-  // construct the table
-  
-  // \par{\trowd
-  // \cellx1000
-  // \cellx2000 
-  // \intbl{ Cel 1 }\cell 
-  // \intbl{ Cel 2 }\cell \row
-  // \trowd
-  // \cellx1000
-  // \cellx2000
-  // \intbl{ Cel 1 }\cell 
-  // \intbl{ Cel 2 }\cell \row}
-  
-  $replace = "\\par{";
-  
-  $col_width = round(9028/$tables[$tid]["cols"]);
-  
-  for ($rid = 0; $rid < count($tables[$tid]["rows"]); $rid++) {
-    $replace .= "\\trowd";
-    $j = 1;
-    for ($i = 0; $i < count($tables[$tid]["rows"][$rid]); $i++) {
-      if (array_key_exists("colspan", $tables[$tid]["rows"][$rid][$i])) {
-        $j += $tables[$tid]["rows"][$rid][$i]["colspan"];
-        $j--;
-      }
-    
-      $replace .= "\\cellx" . ($col_width * $j);
-      $j++;
-    }
-    for ($cid = 0; $cid < count($tables[$tid]["rows"][$rid]); $cid++) {
-      $replace .= "\n\\intbl";
-      $replace .= "{" . $tables[$tid]["rows"][$rid][$cid]["content"] . "}\cell";
-    }
-    $replace .= "\\row\n";
-  }
-  $replace .= "}\n";
-  
-  
-  $content = substr_replace($content, $replace, $tables[$tid]['start'], $tables[$tid]['length']);
-}
-
-
-// IMAGES
-// { \\pict \\pngblib \picscalex100 \picscaley100\n" . wordwrap(bin2hex($img), 80, "\n", TRUE) . "}\n"
-$images = array();
-$tags = array();
-
-preg_match_all("|<img[^>]+>|", $content, $tags, PREG_OFFSET_CAPTURE);
-
-for($i = 0; $i <count($tags[0]); $i++) {
-  $start = $tags[0][$i][1];
-  $length = strlen($tags[0][$i][0]);
-  $matches = array();
-  
-  preg_match("|src=\"([^\"]*)\"|", $tags[0][$i][0], $matches);
-  
-  $url = $matches[1];
-  
-  if (isset($base_url)) {
-    $url = $base_url . $url;
-  }
-  
-  $replace = "\par{\pict";
-  
-
-  if (substr($url, -4) == ".png") {
-    $replace .= "\pngblib ";
-  }
-  else if (substr($url, -4) == ".jpg" or substr($url, -5) == ".jpeg") {
-    $replace .= "\jpegblib ";
-  }
-  
-  // pictures should be outlined over the widt of a page.
-  // A4:
-  
-  $string = file_get_contents($url);
-  
-  
-  $img = imagecreatefromstring($string);
-  
-  $width = imagesx($img);
-  $height = imagesy($img);
-  $ratio = $width/$height;
-  
-  
-  // asume full page width
-  // A4: 9028 twips
-  $picwidth = 9028;
-  $picheight = round($picwidth / $ratio);
-  
-  $replace .= "\\picwgoal".$picwidth."\\pichgoal".$picheight."\\picscalex100\\picscaley100\n";
-  
-  $hex = bin2hex($string);
-  $hex = wordwrap($hex, 80, "\n", TRUE);
-  
-  $replace .= $hex;
-  
-  $replace .= "\n}\n";
-  
-  $props = array();
-  $props['start'] = $start;
-  $props['length'] = $length;
-  $props['replace'] = $replace;
-    
-  array_unshift($images,$props);
-}
-
-for ($i = 0; $i < count($images); $i++) {
-  $content = substr_replace($content, $images[$i]['replace'], $images[$i]['start'], $images[$i]['length']);
-}
-
-
-// SPECIAL CHARACTERS
-// extended ascii
-$content = preg_replace("|€|", "\'80", $content);
-// $content = preg_replace("|foo|", "\'81", $content);
-$content = preg_replace("|‚|", "\'82", $content);
-$content = preg_replace("|ƒ|", "\'83", $content);
-$content = preg_replace("|„|", "\'84", $content);
-$content = preg_replace("|…|", "\'85", $content);
-$content = preg_replace("|†|", "\'86", $content);
-$content = preg_replace("|‡|", "\'87", $content);
-$content = preg_replace("|ˆ|", "\'88", $content);
-$content = preg_replace("|‰|", "\'89", $content);
-$content = preg_replace("|Š|", "\'8a", $content);
-$content = preg_replace("|‹|", "\'8b", $content);
-$content = preg_replace("|Œ|", "\'8c", $content);
-// $content = preg_replace("|foo|", "\'8d", $content);
-$content = preg_replace("|Ž|", "\'8e", $content);
-// $content = preg_replace("|foo|", "\'8f", $content);
-$content = preg_replace("|‘|", "\'91", $content);
-$content = preg_replace("|’|", "\'92", $content);
-$content = preg_replace("|´|", "\'b4", $content);
-$content = preg_replace("|“|", "\'93", $content);
-$content = preg_replace("|”|", "\'94", $content);
-$content = preg_replace("|–|", "\'96", $content);
-$content = preg_replace("|°|", "\'b0", $content);
-$content = preg_replace("|à|", "\'e0", $content);
-$content = preg_replace("|á|", "\'e1", $content);
-$content = preg_replace("|â|", "\'e2", $content);
-$content = preg_replace("|ã|", "\'e3", $content);
-$content = preg_replace("|ä|", "\'e4", $content);
-$content = preg_replace("|å|", "\'e5", $content);
-$content = preg_replace("|æ|", "\'e6", $content);
-$content = preg_replace("|ç|", "\'e7", $content);
-$content = preg_replace("|è|", "\'e8", $content);
-$content = preg_replace("|é|", "\'e9", $content);
-$content = preg_replace("|ê|", "\'ea", $content);
-$content = preg_replace("|ë|", "\'eb", $content);
-$content = preg_replace("|ì|", "\'ec", $content);
-$content = preg_replace("|í|", "\'ed", $content);
-$content = preg_replace("|î|", "\'ee", $content);
-$content = preg_replace("|ï|", "\'ef", $content);
-$content = preg_replace("|ð|", "\'f0", $content);
-$content = preg_replace("|ñ|", "\'f1", $content);
-$content = preg_replace("|ò|", "\'f2", $content);
-$content = preg_replace("|ó|", "\'f3", $content);
-$content = preg_replace("|ô|", "\'f4", $content);
-$content = preg_replace("|õ|", "\'f5", $content);
-$content = preg_replace("|ö|", "\'f6", $content);
-$content = preg_replace("|÷|", "\'f7", $content);
-$content = preg_replace("|ø|", "\'f8", $content);
-$content = preg_replace("|ù|", "\'f9", $content);
-$content = preg_replace("|ú|", "\'fa", $content);
-$content = preg_replace("|û|", "\'fb", $content);
-$content = preg_replace("|ü|", "\'fc", $content);
-$content = preg_replace("|ý|", "\'fd", $content);
-$content = preg_replace("|þ|", "\'fe", $content);
-$content = preg_replace("|ÿ|", "\'ff", $content);
-
-// html
-$content = preg_replace("|&amp;|", "&", $content);
-$content = preg_replace("|&nbsp;|", " ", $content);
-
-// non breaking space
-$content = preg_replace("|\x{C2}\x{A0}|", " ", $content);
-
-// CLEANUP
-// remove remaining tags
-$content = preg_replace("|<[^>]+>|", "", $content);
-
-// FINAL DOCOMENT
-$content = "{" . $header . "\n" . $content;
-$content .= "}";
-
+        $content = bookrtf_convert($content, $base_url);
       
         file_put_contents($file, $content);
       
@@ -512,6 +80,10 @@ $content .= "}";
   
 }
 
+ /**
+ * Copy of book_index_traverse
+ */
+
 function bookrtf_index_traverse($tree) {
     $output = '';    
     
@@ -525,12 +97,462 @@ function bookrtf_index_traverse($tree) {
         }
       }
       
-      $output .= book_node_export($node, $children);
-      
-
-      
+      $output .= book_node_export($node, $children);      
       
     }
     
     return $output;  
+}
+
+ /**
+ * The engine, convert HTML output to RTF and add some shiny touches.
+ */
+
+function bookrtf_convert($content, $base_url) {
+
+    $header = "\\rtf1\n";
+    $header .= "\\vertdoc\\paperh16834\\paperw11909 ";
+    $header .= "\\fet0 \\ftnrstpg\n";
+    $header .= "\\pgnstarts1\\pgndec\n";
+    $header .= "{\\footer \\par \\qc - {\\field{\*\\fldinst  PAGE }{\\fldrslt 2}} -}\n";
+
+    // PAGES
+    $content = preg_replace("|<h1[^>]*>|", "\\page \\fs32\\b ", $content);
+    $content = preg_replace("|</h1>|", "\\b0\\fs24", $content);
+
+
+    // CLEAN UP
+    $content = preg_replace("|([\r\n]+)\s+|", "$1", $content);
+    $content = preg_replace("|<\!DOCTYPE[^>]+>[\s\r\n]*|" , "", $content);
+    $content = preg_replace("|<title>[^<]+</title>[\s\r\n]*|" , "", $content);
+    $content = preg_replace("|</?html[^>]*>[\s\r\n]*|" , "", $content);
+    $content = preg_replace("|<meta[^>]+>[\s\r\n]*|" , "", $content);
+    $content = preg_replace("|<link[^>]+>[\s\r\n]*|" , "", $content);
+    $content = preg_replace("|</?head>[\s\r\n]*|" , "", $content);
+    $content = preg_replace("|</?body>[\s\r\n]*|" , "", $content);
+    $content = preg_replace("|<\!--.+[\s\r\n]*|" , "", $content);
+    $content = preg_replace("|</?div[^>]*>[\s\r\n]*|" , "", $content);
+
+    // MARKUP
+    $content = preg_replace("|<strong>|", "\\b ", $content);
+    $content = preg_replace("|</strong>|", "\\b0 ", $content);
+    $content = preg_replace("|<b>|", "\\b", $content);
+    $content = preg_replace("|</b>|", "\\b0 ", $content);
+    $content = preg_replace("|<u>|", "\\ul ", $content);
+    $content = preg_replace("|</u>|", "\\ul0 ", $content);
+    $content = preg_replace("|<i>|", "\\i ", $content);
+    $content = preg_replace("|</i>|", "\\i0 ", $content);
+    $content = preg_replace("|</?span[^>]*>|", "", $content);
+
+    // PARAGRAPHS & NEWLINES
+    $content = preg_replace("|<p>|", "\\par ", $content);
+    $content = preg_replace("|</p>|", "", $content);
+    $content = preg_replace("|<br( /)?>|", "\\line\n", $content);
+
+    // LISTS
+    $lists = array();
+    $items = array();
+
+    // get lists info
+    $liststarts = array();
+    $listends = array();
+    $listitems = array();
+    // PAGES
+    $content = preg_replace("|<h1[^>]*>|", "\\page \\fs32\\b ", $content);
+    $content = preg_replace("|</h1>|", "\\b0\\fs24", $content);
+    preg_match_all("|<[ou]l[^>]*>|", $content, $liststarts, PREG_OFFSET_CAPTURE);
+    preg_match_all("|</[ou]l[^>]*>|", $content, $listends, PREG_OFFSET_CAPTURE);
+    preg_match_all("|<li[^>]*>|", $content, $listitems, PREG_OFFSET_CAPTURE);
+
+    for ($i = 0; $i < count($liststarts[0]); $i++) {
+    
+    if (substr($liststarts[0][$i][0], 0, 3) == "<ul") {
+        $lists[$i]['type'] = "ul";
+    }
+    else {
+        $lists[$i]['type'] = "ol";
+    }
+    
+    // get start position & length
+    $lists[$i]['start'] = $liststarts[0][$i][1];
+    $lists[$i]['startlength'] = strlen($liststarts[0][$i][0]);
+    
+    
+    if (!array_key_exists("level", $lists[$i])) {
+        $lists[$i]['level'] = 1;
+    }
+    
+    // get end
+    
+    $end = $listends[0][$i][1];
+    $endlength = strlen($listends[0][$i][0]);
+    
+    // get levels
+    for ($j = $i+1; $j < count($liststarts[0]); $j++) {
+        if ($liststarts[0][$j][1] < $end) {
+        # table $j is nested
+        if (array_key_exists($j, $lists)) {
+            $lists[$j]['level']++;
+        }
+        else {
+            $lists[$j]['level'] = 2;
+        }
+        $end = $listends[0][$j][1];
+        $endlength = strlen($listends[0][$j-1][0]);
+        }
+        else {
+        break;
+        }
+    }
+    $j -= 1;
+    if ($j > $i+1) {
+        $removed = array_splice($listends[0], $j, 1);
+        
+        array_splice($listends[0], $i, 0, $removed);
+    }
+    
+    //   $lists[$j]['level']++;
+    
+    // get end position & length
+    $lists[$i]['end'] = $end;
+    $lists[$i]['endlength'] = $endlength;
+    }
+
+
+    // get listitems
+    for ($i = 0; $i < count($listitems[0]); $i++) {
+    $start = $listitems[0][$i][1];
+    $length = strlen($listitems[0][$i][0]);
+    $lid = -1;
+    
+    for ($j = 0; $j < count($lists); $j++) {
+        if ($start > $lists[$j]['start'] and $start < $lists[$j]['end']) {
+        $lid = $j;
+        }
+    }
+    
+    $item = 1;
+    
+    for ($k = 0; $k < count($items); $k++) {
+        if ($items[$k]['lid'] == $lid) {
+        $item++;
+        }
+    }
+    
+    $array = array();
+    $array['start'] = $start;
+    $array['length'] = $length;
+    $array['type'] = $lists[$lid]['type'];
+    $array['lid'] = $lid;
+    $array['item'] = $item;
+    $array['level'] = $lists[$lid]['level'];
+    
+    array_unshift($items, $array);
+    }
+
+    // replace the html the dirty way: replace by tabs, bullets and numbers based on level and item.
+
+
+    for ($i = 0; $i < count($items); $i++) {
+    $array = $items[$i];
+    $replace = "";
+    
+    $firstindent = -360;
+    $lineindent = 720 + 720 * ($array['level']-1);
+    
+    $replace .= "\\par\\fi" . $firstindent . "\\li". $lineindent;
+
+
+        
+    if ($array['type'] == "ul") {
+        $replace .= "\\bullet\\tab";
+    }
+    else {
+        $replace .= " " . $array['item'] . ".\\tab";
+    }
+    
+    $replace .= "\n";
+    
+    $content = substr_replace($content, $replace, $array['start'], $array['length']);
+    }
+
+
+    $content = preg_replace("|</?[ou]l[^>]*>|", "", $content);
+    $content = preg_replace("|</li[^>]*>|", "\\pard", $content);
+
+    // PAGES
+    $content = preg_replace("|<h1[^>]*>|", "\\page \\fs32\\b ", $content);
+    $content = preg_replace("|</h1>|", "\\b0\\fs24", $content);
+    // no reason to start with a blank page
+    $content = substr($content, 6);
+
+    // LINKS
+    // anchors, replace with index TODO
+    $content = preg_replace("|<a[^>]* name=[^>]*>|", "", $content);
+
+
+    // remove internal links
+    $content = preg_replace("|<a[^>]*style=\"float: right\">(.*?)</a>|", "", $content);
+
+    // replace external links and mailtos with footnote 
+    $content = preg_replace("|<a[^>]* href=\"(http://[^\"]*)\"[^>]*>(.*?)</a>|", "$2{\\footnote \\\pard {\up6\chftn} $1}", $content);
+    $content = preg_replace("|<a[^>]* href=\"mailto:([^\"]*)\"[^>]*>(.*?)</a>|", "$2{\\footnote \\\pard {\up6\chftn} $1}", $content);
+
+    // TABLES
+    $tables = array();
+    $tablestarts = array();
+    $tableends = array();
+    preg_match_all("|<table[^>]*>|", $content, $tablestarts, PREG_OFFSET_CAPTURE);
+    preg_match_all("|</table[^>]*>|", $content, $tableends, PREG_OFFSET_CAPTURE);
+
+
+    for ($i = 0; $i < count($tablestarts[0]); $i++) {
+    $start = $tablestarts[0][$i][1];
+    $end = $tableends[0][$i][1] + strlen($tableends[0][$i][0]);
+    $length = $end - $start;
+    
+    array_unshift($tables, array("start" => $start, "end" => $end, "length" => $length, "rows" => array()));
+    }
+
+    $trows = array();
+    $trowsstart = array();
+    $trowsend = array();
+    preg_match_all("|<tr[^>]*>|", $content, $trowsstart, PREG_OFFSET_CAPTURE);
+    preg_match_all("|</tr>|", $content, $trowsend, PREG_OFFSET_CAPTURE);
+
+    for ($i = 0; $i < count($trowsstart[0]); $i++) {
+    $start = $trowsstart[0][$i][1];
+    $length = strlen($trowsstart[0][$i][0]);
+    $end = $trowsend[0][$i][1];
+    $tid = -1;
+    
+    for ($j = 0; $j < count($tables); $j++) {
+        if ($start > $tables[$j]["start"] and $start < $tables[$j]["end"]) {
+        $tid = $j;
+        break;
+        }
+    }
+    
+    $html = substr($content, $start, $end-$start);
+    
+    $cells = array();
+    $cellstarts = array();
+    $cellends = array();
+    preg_match_all("|<t[dh][^>]*>|", $html, $cellstarts, PREG_OFFSET_CAPTURE);
+    preg_match_all("|</t[dh][^>]*>|", $html, $cellends, PREG_OFFSET_CAPTURE);
+    
+    for ($j = 0; $j < count($cellstarts[0]); $j++) {
+        $start = $cellstarts[0][$j][1] + strlen($cellstarts[0][$j][0]);
+        $end = $cellends[0][$j][1];
+        $length = $end - $start;
+        
+        $props = array();
+        $props["content"] = substr($html, $start, $length);
+        
+        preg_match("|colspan=\"(\d+)\"|", $cellstarts[0][$j][0], $matches);
+        if (array_key_exists(1, $matches)) {
+        $props['colspan'] = $matches[1][0];
+        }
+        
+        array_push($cells, $props);
+    }
+    
+    $cols = count($cells);
+    if (!array_key_exists("cols", $tables[$tid])) {
+        $tables[$tid]["cols"] = $cols;
+    }
+    else if ($cols > $tables[$tid]["cols"]) {
+        $tables[$tid]["cols"] = $cols;
+    }
+    
+    array_push($tables[$tid]["rows"], $cells);
+    }
+
+    for ($tid = 0; $tid < count($tables); $tid++) {
+    // construct the table
+    
+    // \par{\trowd
+    // \cellx1000
+    // \cellx2000 
+    // \intbl{ Cel 1 }\cell 
+    // \intbl{ Cel 2 }\cell \row
+    // \trowd
+    // \cellx1000
+    // \cellx2000
+    // \intbl{ Cel 1 }\cell 
+    // \intbl{ Cel 2 }\cell \row}
+    
+    $replace = "\\par{";
+    
+    $col_width = round(9028/$tables[$tid]["cols"]);
+    
+    for ($rid = 0; $rid < count($tables[$tid]["rows"]); $rid++) {
+        $replace .= "\\trowd";
+        $j = 1;
+        for ($i = 0; $i < count($tables[$tid]["rows"][$rid]); $i++) {
+        if (array_key_exists("colspan", $tables[$tid]["rows"][$rid][$i])) {
+            $j += $tables[$tid]["rows"][$rid][$i]["colspan"];
+            $j--;
+        }
+        
+        $replace .= "\\cellx" . ($col_width * $j);
+        $j++;
+        }
+        for ($cid = 0; $cid < count($tables[$tid]["rows"][$rid]); $cid++) {
+        $replace .= "\n\\intbl";
+        $replace .= "{" . $tables[$tid]["rows"][$rid][$cid]["content"] . "}\cell";
+        }
+        $replace .= "\\row\n";
+    }
+    $replace .= "}\n";
+    
+    
+    $content = substr_replace($content, $replace, $tables[$tid]['start'], $tables[$tid]['length']);
+    }
+
+
+    // IMAGES
+    // { \\pict \\pngblib \picscalex100 \picscaley100\n" . wordwrap(bin2hex($img), 80, "\n", TRUE) . "}\n"
+    $images = array();
+    $tags = array();
+
+    preg_match_all("|<img[^>]+>|", $content, $tags, PREG_OFFSET_CAPTURE);
+
+    for($i = 0; $i <count($tags[0]); $i++) {
+    $start = $tags[0][$i][1];
+    $length = strlen($tags[0][$i][0]);
+    $matches = array();
+    
+    preg_match("|src=\"([^\"]*)\"|", $tags[0][$i][0], $matches);
+    
+    $url = $matches[1];
+    
+    if (isset($base_url)) {
+        $url = $base_url . $url;
+    }
+    
+    $replace = "\par{\pict";
+    
+
+    if (substr($url, -4) == ".png") {
+        $replace .= "\pngblib ";
+    }
+    else if (substr($url, -4) == ".jpg" or substr($url, -5) == ".jpeg") {
+        $replace .= "\jpegblib ";
+    }
+    
+    // pictures should be outlined over the widt of a page.
+    // A4:
+    
+    $string = file_get_contents($url);
+    
+    
+    $img = imagecreatefromstring($string);
+    
+    $width = imagesx($img);
+    $height = imagesy($img);
+    $ratio = $width/$height;
+    
+    
+    // asume full page width
+    // A4: 9028 twips
+    $picwidth = 9028;
+    $picheight = round($picwidth / $ratio);
+    
+    $replace .= "\\picwgoal".$picwidth."\\pichgoal".$picheight."\\picscalex100\\picscaley100\n";
+    
+    $hex = bin2hex($string);
+    $hex = wordwrap($hex, 80, "\n", TRUE);
+    
+    $replace .= $hex;
+    
+    $replace .= "\n}\n";
+    
+    $props = array();
+    $props['start'] = $start;
+    $props['length'] = $length;
+    $props['replace'] = $replace;
+    
+    array_unshift($images,$props);
+    }
+
+    for ($i = 0; $i < count($images); $i++) {
+    $content = substr_replace($content, $images[$i]['replace'], $images[$i]['start'], $images[$i]['length']);
+    }
+
+
+    // SPECIAL CHARACTERS
+    // extended ascii
+    $content = preg_replace("|€|", "\'80", $content);
+    // $content = preg_replace("|foo|", "\'81", $content);
+    $content = preg_replace("|‚|", "\'82", $content);
+    $content = preg_replace("|ƒ|", "\'83", $content);
+    $content = preg_replace("|„|", "\'84", $content);
+    $content = preg_replace("|…|", "\'85", $content);
+    $content = preg_replace("|†|", "\'86", $content);
+    $content = preg_replace("|‡|", "\'87", $content);
+    $content = preg_replace("|ˆ|", "\'88", $content);
+    $content = preg_replace("|‰|", "\'89", $content);
+    $content = preg_replace("|Š|", "\'8a", $content);
+    $content = preg_replace("|‹|", "\'8b", $content);
+    $content = preg_replace("|Œ|", "\'8c", $content);
+    // $content = preg_replace("|foo|", "\'8d", $content);
+    $content = preg_replace("|Ž|", "\'8e", $content);
+    // $content = preg_replace("|foo|", "\'8f", $content);
+    $content = preg_replace("|‘|", "\'91", $content);
+    $content = preg_replace("|’|", "\'92", $content);
+    $content = preg_replace("|´|", "\'b4", $content);
+    $content = preg_replace("|“|", "\'93", $content);
+    $content = preg_replace("|”|", "\'94", $content);
+    $content = preg_replace("|–|", "\'96", $content);
+    $content = preg_replace("|°|", "\'b0", $content);
+    $content = preg_replace("|à|", "\'e0", $content);
+    $content = preg_replace("|á|", "\'e1", $content);
+    $content = preg_replace("|â|", "\'e2", $content);
+    $content = preg_replace("|ã|", "\'e3", $content);
+    $content = preg_replace("|ä|", "\'e4", $content);
+    $content = preg_replace("|å|", "\'e5", $content);
+    $content = preg_replace("|æ|", "\'e6", $content);
+    $content = preg_replace("|ç|", "\'e7", $content);
+    $content = preg_replace("|è|", "\'e8", $content);
+    $content = preg_replace("|é|", "\'e9", $content);
+    $content = preg_replace("|ê|", "\'ea", $content);
+    $content = preg_replace("|ë|", "\'eb", $content);
+    $content = preg_replace("|ì|", "\'ec", $content);
+    $content = preg_replace("|í|", "\'ed", $content);
+    $content = preg_replace("|î|", "\'ee", $content);
+    $content = preg_replace("|ï|", "\'ef", $content);
+    $content = preg_replace("|ð|", "\'f0", $content);
+    $content = preg_replace("|ñ|", "\'f1", $content);
+    $content = preg_replace("|ò|", "\'f2", $content);
+    $content = preg_replace("|ó|", "\'f3", $content);
+    $content = preg_replace("|ô|", "\'f4", $content);
+    $content = preg_replace("|õ|", "\'f5", $content);
+    $content = preg_replace("|ö|", "\'f6", $content);
+    $content = preg_replace("|÷|", "\'f7", $content);
+    $content = preg_replace("|ø|", "\'f8", $content);
+    $content = preg_replace("|ù|", "\'f9", $content);
+    $content = preg_replace("|ú|", "\'fa", $content);
+    $content = preg_replace("|û|", "\'fb", $content);
+    $content = preg_replace("|ü|", "\'fc", $content);
+    $content = preg_replace("|ý|", "\'fd", $content);
+    $content = preg_replace("|þ|", "\'fe", $content);
+    $content = preg_replace("|ÿ|", "\'ff", $content);
+
+    // html
+    $content = preg_replace("|&amp;|", "&", $content);
+    $content = preg_replace("|&nbsp;|", " ", $content);
+
+    // non breaking space
+    $content = preg_replace("|\x{C2}\x{A0}|", " ", $content);
+
+    // CLEANUP
+    // remove remaining tags
+    $content = preg_replace("|<[^>]+>|", "", $content);
+
+    // FINAL DOCOMENT
+    $content = "{" . $header . "\n" . $content;
+    $content .= "}";
+
+  return $content;
 }
