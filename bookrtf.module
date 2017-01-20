@@ -112,14 +112,7 @@ function bookrtf_convert($content, $base_url) {
 
     $header = "\\rtf1\n";
     $header .= "\\vertdoc\\paperh16834\\paperw11909 ";
-    $header .= "\\fet0 \\ftnrstpg\n";
-    $header .= "\\pgnstarts1\\pgndec\n";
-    $header .= "{\\footer \\par \\qc - {\\field{\*\\fldinst  PAGE }{\\fldrslt 2}} -}\n";
-
-    // PAGES
-    $content = preg_replace("|<h1[^>]*>|", "\\page \\fs32\\b ", $content);
-    $content = preg_replace("|</h1>|", "\\b0\\fs24", $content);
-
+    $header .= "\\fet0 \\ftnrstpg \\facingp\n";
 
     // CLEAN UP
     $content = preg_replace("|([\r\n]+)\s+|", "$1", $content);
@@ -149,6 +142,34 @@ function bookrtf_convert($content, $base_url) {
     $content = preg_replace("|</p>|", "", $content);
     $content = preg_replace("|<br( /)?>|", "\\line\n", $content);
 
+    // PAGES
+    $content = preg_replace("|<h1[^>]*>|", "\\page \\fs32\\b ", $content);
+    $content = preg_replace("|</h1>|", "\\b0\\fs24", $content);
+    
+    // no reason to start with a blank page
+    $content = substr($content, 6);
+    
+    $matches = array();
+    
+    // add blank page + header after the first page, start numbering at page 3.
+    preg_match_all("|\\\\page |", $content, $matches, PREG_OFFSET_CAPTURE);
+    
+    $date = new DateTime();
+    // $date = getTimestamp();
+    
+    $replace = "\\par \\sect\\sbkpg\n";
+    $replace .= "{\\headerl \\par \\ql \b1Gele boekje\b0}\n";
+    $replace .= "\\sect\\sbkpg\n";
+    $replace .= "\\pgnstart3\\pgndec\n";
+    $replace .= "{\\footerr \\par \\qr {\\field{\*\\fldinst  PAGE }{\\fldrslt 2}}}\n";
+    $replace .= "{\\headerr \\par \\qr Versie " . date_format($date, "d-m-Y") . "}\n";
+    $replace .= "{\\footerl \\par \\ql {\\field{\*\\fldinst  PAGE }{\\fldrslt 2}}}\n";
+    
+    $first = $matches[0][0][1];
+    $length = strlen($matches[0][0][0]);
+    
+    $content = substr_replace($content, $replace, $first, $length);
+    
     // LISTS
     $lists = array();
     $items = array();
@@ -157,9 +178,8 @@ function bookrtf_convert($content, $base_url) {
     $liststarts = array();
     $listends = array();
     $listitems = array();
-    // PAGES
-    $content = preg_replace("|<h1[^>]*>|", "\\page \\fs32\\b ", $content);
-    $content = preg_replace("|</h1>|", "\\b0\\fs24", $content);
+        
+    
     preg_match_all("|<[ou]l[^>]*>|", $content, $liststarts, PREG_OFFSET_CAPTURE);
     preg_match_all("|</[ou]l[^>]*>|", $content, $listends, PREG_OFFSET_CAPTURE);
     preg_match_all("|<li[^>]*>|", $content, $listitems, PREG_OFFSET_CAPTURE);
@@ -279,12 +299,6 @@ function bookrtf_convert($content, $base_url) {
 
     $content = preg_replace("|</?[ou]l[^>]*>|", "", $content);
     $content = preg_replace("|</li[^>]*>|", "\\pard", $content);
-
-    // PAGES
-    $content = preg_replace("|<h1[^>]*>|", "\\page \\fs32\\b ", $content);
-    $content = preg_replace("|</h1>|", "\\b0\\fs24", $content);
-    // no reason to start with a blank page
-    $content = substr($content, 6);
 
     // LINKS
     // anchors, replace with index TODO
