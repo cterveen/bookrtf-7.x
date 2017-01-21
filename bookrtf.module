@@ -142,33 +142,80 @@ function bookrtf_convert($content, $base_url) {
     $content = preg_replace("|</p>|", "", $content);
     $content = preg_replace("|<br( /)?>|", "\\line\n", $content);
 
-    // PAGES
-    $content = preg_replace("|<h1[^>]*>|", "\\page \\fs32\\b ", $content);
-    $content = preg_replace("|</h1>|", "\\b0\\fs24", $content);
+    // HEADERS
+    $chapters = array();
+    $replacements = array();
+    $book_title = "";
     
-    // no reason to start with a blank page
-    $content = substr($content, 6);
+    preg_match_all("|<h1[^>]*>.*?</h1>|", $content, $chapters, PREG_OFFSET_CAPTURE);
+
+    for ($i = 0; $i < count($chapters[0]); $i++) {
+      $properties = array();
+      $properties[0] = $chapters[0][$i][1];
+      $properties[1] = strlen($chapters[0][$i][0]);
+      
+      $title = preg_replace("|<[^>]*>|", "", $chapters[0][$i][0]);
+      
+      if ($i == 0) {
+        $book_title = $title;
+      }      
+      
+      if (preg_match("|^\d+\.|", $title)) {
+        // Chapter titles start with a number
+        if ($i == 1) {
+          // add a disclaimer on the second page
+          $date = new DateTime();
+
+          $disclaimer = "\\pard\\qc \\b1 " . $book_title . "\\b0 \\line\n";
+          $disclaimer .= "R&ZV Daventria\\line\n\\line\n";
+          if (isset($base_url)) {
+            $disclaimer .= $base_url;
+          }
+          else {
+            $disclaimer .= "http://gele-boekje.daventria.com/";
+          }
+          $disclaimer .= "\\line\n\\line\n";
+          $disclaimer .= "Gedownload: " . date_format($date, "d-m-Y") . " \\pard";
+        
+          $properties[2] = "\\page \\sect\n";
+          $properties[2] .= "{\\headerl \\par \\ql \b1Gele boekje\b0}\n";
+          $properties[2] .= $disclaimer;
+          $properties[2] .= "\\sect\n";
+          $properties[2] .= "\\pgnstart3\\pgndec\n";
+          $properties[2] .= "{\\footerr \\par \\qr {\\field{\*\\fldinst  PAGE }{\\fldrslt 2}}}\n";
+          $properties[2] .= "{\\footerl \\par \\ql {\\field{\*\\fldinst  PAGE }{\\fldrslt 2}}}\n";
+        }
+        else {
+          $properties[2] = "\\par \\page \\sect\n";
+        }
+        $properties[2] .= "{\\headerr \\par \\qr " . $title . "}\n";
+        $properties[2] .= "\\fs32\\b1 ";
+        $properties[2] .= $title;
+        $properties[2] .= "\\b0\\fs24\n";
+      }
+      else if ($i == 0) {
+        // Title of the book doesn't start with a number but should be printed as chapter title
+        $properties[2] = "\\fs32 \\b1";
+        $properties[2] .= $title;
+        $properties[2] .= "\\b0\\fs24\n";
+      }
+      else {
+        // other titles of subsections
+        $properties[2] = "\\b1";
+        $properties[2] .= $title;
+        $properties[2] .= "\\b0\n";
+      }
+      
+      array_unshift($replacements, $properties);
+    }
     
-    $matches = array();
+    foreach ($replacements as $prop) {
+      $content = substr_replace($content, $prop[2], $prop[0], $prop[1]);
+    }
     
-    // add blank page + header after the first page, start numbering at page 3.
-    preg_match_all("|\\\\page |", $content, $matches, PREG_OFFSET_CAPTURE);
+
     
-    $date = new DateTime();
-    // $date = getTimestamp();
-    
-    $replace = "\\par \\sect\\sbkpg\n";
-    $replace .= "{\\headerl \\par \\ql \b1Gele boekje\b0}\n";
-    $replace .= "\\sect\\sbkpg\n";
-    $replace .= "\\pgnstart3\\pgndec\n";
-    $replace .= "{\\footerr \\par \\qr {\\field{\*\\fldinst  PAGE }{\\fldrslt 2}}}\n";
-    $replace .= "{\\headerr \\par \\qr Versie " . date_format($date, "d-m-Y") . "}\n";
-    $replace .= "{\\footerl \\par \\ql {\\field{\*\\fldinst  PAGE }{\\fldrslt 2}}}\n";
-    
-    $first = $matches[0][0][1];
-    $length = strlen($matches[0][0][0]);
-    
-    $content = substr_replace($content, $replace, $first, $length);
+
     
     // LISTS
     $lists = array();
@@ -309,9 +356,34 @@ function bookrtf_convert($content, $base_url) {
     $content = preg_replace("|<a[^>]*style=\"float: right\">(.*?)</a>|", "", $content);
 
     // replace external links and mailtos with footnote 
-    $content = preg_replace("|<a[^>]* href=\"(http://[^\"]*)\"[^>]*>(.*?)</a>|", "$2{\\footnote \\\pard {\up6\chftn} $1}", $content);
-    $content = preg_replace("|<a[^>]* href=\"mailto:([^\"]*)\"[^>]*>(.*?)</a>|", "$2{\\footnote \\\pard {\up6\chftn} $1}", $content);
-
+    
+    $links = array();
+    $replacements = array();
+    
+    preg_match_all(";<a[^>]* href=\"((http://|mailto:)[^\"]*)\"[^>]*>(.*?)</a>;", $content, $links, PREG_OFFSET_CAPTURE);
+    
+    for ($i = 0; $i < count($links[0]); $i++) {
+      $properties[0] = $links[0][$i][1];
+      $properties[1] = strlen($links[0][$i][0]);
+      
+      $url = $links[1][$i][0];
+      $title = $links[3][$i][0];
+      
+      // no use to add a footnote if the title and link have the same information
+      if (preg_match("|^(http://)?(mailto:)?" . $title . "/?$|", $url)) {
+        $properties[2] = $title;
+      }
+      else {
+        $properties[2] = $title . "{\\footnote \\pard {\\up6 \\chftn} " . $url . "}"; 
+      }
+      
+      array_unshift($replacements, $properties);
+    }
+    
+    foreach ($replacements as $prop) {
+      $content = substr_replace($content, $prop[2], $prop[0], $prop[1]);
+    }
+    
     // TABLES
     $tables = array();
     $tablestarts = array();
