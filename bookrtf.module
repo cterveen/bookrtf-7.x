@@ -125,7 +125,12 @@ function bookrtf_convert($content, $base_url) {
     $content = preg_replace("|</?body>[\s\r\n]*|" , "", $content);
     $content = preg_replace("|<\!--.+[\s\r\n]*|" , "", $content);
     $content = preg_replace("|</?div[^>]*>[\s\r\n]*|" , "", $content);
-
+    
+    // PARAGRAPHS & NEWLINES
+    $content = preg_replace("|<p>|", "\\par \\sa200 \\qj ", $content);
+    $content = preg_replace("|</p>|", "", $content);
+    $content = preg_replace("|<br( /)?>|", "\\tab\\line\n", $content);
+    
     // MARKUP
     $content = preg_replace("|<strong>|", "\\b ", $content);
     $content = preg_replace("|</strong>|", "\\b0 ", $content);
@@ -137,18 +142,33 @@ function bookrtf_convert($content, $base_url) {
     $content = preg_replace("|</i>|", "\\i0 ", $content);
     $content = preg_replace("|</?span[^>]*>|", "", $content);
 
-    // PARAGRAPHS & NEWLINES
-    $content = preg_replace("|<p>|", "\\par ", $content);
-    $content = preg_replace("|</p>|", "", $content);
-    $content = preg_replace("|<br( /)?>|", "\\line\n", $content);
-
     // HEADERS
     $chapters = array();
     $replacements = array();
     $book_title = "";
     
     preg_match_all("|<h1[^>]*>.*?</h1>|", $content, $chapters, PREG_OFFSET_CAPTURE);
-
+    
+    $book_title = preg_replace("|<[^>]*>|", "", $chapters[0][0][0]);
+    
+    // front: disclaimer on the front flyleaf
+    $date = new DateTime();
+    $front = "\\page \\sect\n";
+    $front .= "\\pard\\qc \\b1 " . $book_title . "\\b0 \\line\n";
+    $front .= "R&ZV Daventria\\line\n\\line\n";
+    if (isset($base_url)) {
+      $front .= $base_url;
+    }
+    else {
+      $front .= "http://gele-boekje.daventria.com/";
+    }
+    $front .= "\\line\n\\line\n";
+    $front .= "Gedownload: " . date_format($date, "d-m-Y") . " \\pard";
+    $front .= "\\page\n";
+    $front .= "\\par \\sa200 \\fs32 \\b1 Inhoud\\b0\\fs24\\pard\n";
+    $front .= "\\par {";
+    
+    
     for ($i = 0; $i < count($chapters[0]); $i++) {
       $properties = array();
       $properties[0] = $chapters[0][$i][1];
@@ -156,42 +176,33 @@ function bookrtf_convert($content, $base_url) {
       
       $title = preg_replace("|<[^>]*>|", "", $chapters[0][$i][0]);
       
-      if ($i == 0) {
-        $book_title = $title;
-      }      
-      
-      if (preg_match("|^\d+\.|", $title)) {
+      $match = array();
+        
+      if (preg_match("|^(\d+)\.\s|", $title, $match)) {
         // Chapter titles start with a number
         if ($i == 1) {
-          // add a disclaimer on the second page
-          $date = new DateTime();
-
-          $disclaimer = "\\pard\\qc \\b1 " . $book_title . "\\b0 \\line\n";
-          $disclaimer .= "R&ZV Daventria\\line\n\\line\n";
-          if (isset($base_url)) {
-            $disclaimer .= $base_url;
-          }
-          else {
-            $disclaimer .= "http://gele-boekje.daventria.com/";
-          }
-          $disclaimer .= "\\line\n\\line\n";
-          $disclaimer .= "Gedownload: " . date_format($date, "d-m-Y") . " \\pard";
-        
-          $properties[2] = "\\page \\sect\n";
-          $properties[2] .= "{\\headerl \\par \\ql \b1Gele boekje\b0}\n";
-          $properties[2] .= $disclaimer;
-          $properties[2] .= "\\sect\n";
-          $properties[2] .= "\\pgnstart3\\pgndec\n";
-          $properties[2] .= "{\\footerr \\par \\qr {\\field{\*\\fldinst  PAGE }{\\fldrslt 2}}}\n";
-          $properties[2] .= "{\\footerl \\par \\ql {\\field{\*\\fldinst  PAGE }{\\fldrslt 2}}}\n";
+            $properties[2] = "\\par \\page \\sect\n";
+            $properties[2] .= "\\pgndec\n"; 
+            $properties[2] .= "{\\headerl \\par \\ql \b1Gele boekje\b0}\n";
+            $properties[2] .= "{\\footerr \\par \\qr {\\field{\*\\fldinst  PAGE }{\\fldrslt 2}}}\n";
+            $properties[2] .= "{\\footerl \\par \\ql {\\field{\*\\fldinst  PAGE }{\\fldrslt 2}}}\n";
+            $properties[2] .= "{\\headerr \\par \\qr " . $title . "}\n";
+            $properties[2] .= "\\page\n";
+            $properties[2] .= "\\fs32\\b1 ";
+            $properties[2] .= "{\\*\\bkmkstart chapter".$match[1]."}{\\*\\bkmkend chapter".$match[1]."}" . $title;
+            $properties[2] .= "\\b0\\fs24\n";
         }
         else {
-          $properties[2] = "\\par \\page \\sect\n";
+            $properties[2] = "\\par \\page \\sect\n";
+            $properties[2] .= "{\\headerr \\par \\qr " . $title . "}\n";
+            $properties[2] .= "\\fs32\\b1 ";
+            $properties[2] .= "{\\*\\bkmkstart chapter".$match[1]."}{\\*\\bkmkend chapter".$match[1]."}" . $title;
+            $properties[2] .= "\\b0\\fs24\n";
         }
-        $properties[2] .= "{\\headerr \\par \\qr " . $title . "}\n";
-        $properties[2] .= "\\fs32\\b1 ";
-        $properties[2] .= $title;
-        $properties[2] .= "\\b0\\fs24\n";
+        $front .= "\\trowd";
+        $front .= "\\cellx7000 \\cellx9028\n"; 
+        $front .= "\\intbl " .$title . "\\cell";
+        $front .= "\\qr{\\field{\*\\fldinst PAGEREF chapter".$match[1]."}}\\pard\\cell\\row\n";
       }
       else if ($i == 0) {
         // Title of the book doesn't start with a number but should be printed as chapter title
@@ -205,18 +216,18 @@ function bookrtf_convert($content, $base_url) {
         $properties[2] .= $title;
         $properties[2] .= "\\b0\n";
       }
-      
       array_unshift($replacements, $properties);
     }
+    
+    $front .= "}";
+   
+    // add all the front stuff to the second title
+    $replacements[count($replacements)-2][2] = $front . $replacements[count($replacements)-2][2];
     
     foreach ($replacements as $prop) {
       $content = substr_replace($content, $prop[2], $prop[0], $prop[1]);
     }
-    
-
-    
-
-    
+      
     // LISTS
     $lists = array();
     $items = array();
@@ -243,7 +254,7 @@ function bookrtf_convert($content, $base_url) {
     // get start position & length
     $lists[$i]['start'] = $liststarts[0][$i][1];
     $lists[$i]['startlength'] = strlen($liststarts[0][$i][0]);
-    
+    $lists[$i]['size'] = 0;
     
     if (!array_key_exists("level", $lists[$i])) {
         $lists[$i]['level'] = 1;
@@ -288,64 +299,70 @@ function bookrtf_convert($content, $base_url) {
 
     // get listitems
     for ($i = 0; $i < count($listitems[0]); $i++) {
-    $start = $listitems[0][$i][1];
-    $length = strlen($listitems[0][$i][0]);
-    $lid = -1;
+      $start = $listitems[0][$i][1];
+      $length = strlen($listitems[0][$i][0]);
+      $lid = -1;
     
-    for ($j = 0; $j < count($lists); $j++) {
+      for ($j = 0; $j < count($lists); $j++) {
         if ($start > $lists[$j]['start'] and $start < $lists[$j]['end']) {
-        $lid = $j;
+          $lid = $j;
         }
-    }
+      }
+      
+      $lists[$lid]['size']++;    
+      $item = 1;
     
-    $item = 1;
-    
-    for ($k = 0; $k < count($items); $k++) {
+      for ($k = 0; $k < count($items); $k++) {
         if ($items[$k]['lid'] == $lid) {
-        $item++;
+          $item++;
         }
-    }
+      }
     
-    $array = array();
-    $array['start'] = $start;
-    $array['length'] = $length;
-    $array['type'] = $lists[$lid]['type'];
-    $array['lid'] = $lid;
-    $array['item'] = $item;
-    $array['level'] = $lists[$lid]['level'];
+      $array = array();
+      $array['start'] = $start;
+      $array['length'] = $length;
+      $array['type'] = $lists[$lid]['type'];
+      $array['lid'] = $lid;
+      $array['item'] = $item;
+      $array['level'] = $lists[$lid]['level'];
     
-    array_unshift($items, $array);
+      array_unshift($items, $array);
     }
 
     // replace the html the dirty way: replace by tabs, bullets and numbers based on level and item.
 
 
     for ($i = 0; $i < count($items); $i++) {
-    $array = $items[$i];
-    $replace = "";
+      $array = $items[$i];
+      $replace = "";
     
-    $firstindent = -360;
-    $lineindent = 720 + 720 * ($array['level']-1);
-    
-    $replace .= "\\par\\fi" . $firstindent . "\\li". $lineindent;
-
-
+      $firstindent = -360;
+      $lineindent = 720 + 720 * ($array['level']-1);
+      
+      if ($lists[$array['lid']]['size'] == $array['item']) {
+        $replace .= "\\par\\sa200";
+      }
+      else {
+        $replace .= "\\par";
+      }
+      
+      $replace .= "\\fi" . $firstindent . "\\li". $lineindent;
         
-    if ($array['type'] == "ul") {
-        $replace .= "\\bullet\\tab";
-    }
-    else {
+      if ($array['type'] == "ul") {
+          $replace .= "\\bullet\\tab";
+      }
+      else {
         $replace .= " " . $array['item'] . ".\\tab";
-    }
+      }
     
-    $replace .= "\n";
+      $replace .= "\n";
     
-    $content = substr_replace($content, $replace, $array['start'], $array['length']);
+      $content = substr_replace($content, $replace, $array['start'], $array['length']);
     }
 
 
-    $content = preg_replace("|</?[ou]l[^>]*>|", "", $content);
-    $content = preg_replace("|</li[^>]*>|", "\\pard", $content);
+    $content = preg_replace("|</?[ou]l[^>]*>|", "\\pard", $content);
+    $content = preg_replace("|</li[^>]*>|", "", $content);
 
     // LINKS
     // anchors, replace with index TODO
@@ -355,8 +372,7 @@ function bookrtf_convert($content, $base_url) {
     // remove internal links
     $content = preg_replace("|<a[^>]*style=\"float: right\">(.*?)</a>|", "", $content);
 
-    // replace external links and mailtos with footnote 
-    
+    // replace external links and mailtos with footnote    
     $links = array();
     $replacements = array();
     
@@ -505,65 +521,65 @@ function bookrtf_convert($content, $base_url) {
     preg_match_all("|<img[^>]+>|", $content, $tags, PREG_OFFSET_CAPTURE);
 
     for($i = 0; $i <count($tags[0]); $i++) {
-    $start = $tags[0][$i][1];
-    $length = strlen($tags[0][$i][0]);
-    $matches = array();
-    
-    preg_match("|src=\"([^\"]*)\"|", $tags[0][$i][0], $matches);
-    
-    $url = $matches[1];
-    
-    if (isset($base_url)) {
-        $url = $base_url . $url;
-    }
-    
-    $replace = "\par{\pict";
-    
+        $start = $tags[0][$i][1];
+        $length = strlen($tags[0][$i][0]);
+        $matches = array();
+        
+        preg_match("|src=\"([^\"]*)\"|", $tags[0][$i][0], $matches);
+        
+        $url = $matches[1];
+        
+        if (isset($base_url)) {
+            $url = $base_url . $url;
+        }
+        
+        $replace = "\par{\pict";
+        
 
-    if (substr($url, -4) == ".png") {
-        $replace .= "\pngblib ";
-    }
-    else if (substr($url, -4) == ".jpg" or substr($url, -5) == ".jpeg") {
-        $replace .= "\jpegblib ";
-    }
-    
-    // pictures should be outlined over the widt of a page.
-    // A4:
-    
-    $string = file_get_contents($url);
-    
-    
-    $img = imagecreatefromstring($string);
-    
-    $width = imagesx($img);
-    $height = imagesy($img);
-    $ratio = $width/$height;
-    
-    
-    // asume full page width
-    // A4: 9028 twips
-    $picwidth = 9028;
-    $picheight = round($picwidth / $ratio);
-    
-    $replace .= "\\picwgoal".$picwidth."\\pichgoal".$picheight."\\picscalex100\\picscaley100\n";
-    
-    $hex = bin2hex($string);
-    $hex = wordwrap($hex, 80, "\n", TRUE);
-    
-    $replace .= $hex;
-    
-    $replace .= "\n}\n";
-    
-    $props = array();
-    $props['start'] = $start;
-    $props['length'] = $length;
-    $props['replace'] = $replace;
-    
-    array_unshift($images,$props);
+        if (substr($url, -4) == ".png") {
+            $replace .= "\pngblib ";
+        }
+        else if (substr($url, -4) == ".jpg" or substr($url, -5) == ".jpeg") {
+            $replace .= "\jpegblib ";
+        }
+        
+        // pictures should be outlined over the widt of a page.
+        // A4:
+        
+        $string = file_get_contents($url);
+        
+        
+        $img = imagecreatefromstring($string);
+        
+        $width = imagesx($img);
+        $height = imagesy($img);
+        $ratio = $width/$height;
+        
+        
+        // asume full page width
+        // A4: 9028 twips
+        $picwidth = 9028;
+        $picheight = round($picwidth / $ratio);
+        
+        $replace .= "\\picwgoal".$picwidth."\\pichgoal".$picheight."\\picscalex100\\picscaley100\n";
+        
+        $hex = bin2hex($string);
+        $hex = wordwrap($hex, 80, "\n", TRUE);
+        
+        $replace .= $hex;
+        
+        $replace .= "\n}\n";
+        
+        $props = array();
+        $props['start'] = $start;
+        $props['length'] = $length;
+        $props['replace'] = $replace;
+        
+        array_unshift($images,$props);
     }
 
     for ($i = 0; $i < count($images); $i++) {
-    $content = substr_replace($content, $images[$i]['replace'], $images[$i]['start'], $images[$i]['length']);
+      $content = substr_replace($content, $images[$i]['replace'], $images[$i]['start'], $images[$i]['length']);
     }
 
 
@@ -590,8 +606,81 @@ function bookrtf_convert($content, $base_url) {
     $content = preg_replace("|´|", "\'b4", $content);
     $content = preg_replace("|“|", "\'93", $content);
     $content = preg_replace("|”|", "\'94", $content);
+    $content = preg_replace("|•|", "\'95", $content);
     $content = preg_replace("|–|", "\'96", $content);
+    $content = preg_replace("|–|", "\'97", $content);
+    $content = preg_replace("|˜|", "\'98", $content);
+    $content = preg_replace("|™|", "\'99", $content);
+    $content = preg_replace("|š|", "\'9a", $content);
+    $content = preg_replace("|›|", "\'9b", $content);
+    $content = preg_replace("|œ|", "\'9c", $content);
+//     $content = preg_replace("|foo|", "\'9d", $content);
+    $content = preg_replace("|ž|", "\'9e", $content);
+    $content = preg_replace("|Ÿ|", "\'9f", $content);
+//     $content = preg_replace("|foo|", "\'a0", $content);
+    $content = preg_replace("|¡|", "\'a1", $content);
+    $content = preg_replace("|¢|", "\'a2", $content);
+    $content = preg_replace("|£|", "\'a3", $content);
+    $content = preg_replace("|¤|", "\'a4", $content);
+    $content = preg_replace("|¥|", "\'a5", $content);
+    $content = preg_replace("|¦|", "\'a6", $content);
+    $content = preg_replace("|§|", "\'a7", $content);
+    $content = preg_replace("|¨|", "\'a8", $content);
+    $content = preg_replace("|©|", "\'a9", $content);
+    $content = preg_replace("|ª|", "\'aa", $content);
+    $content = preg_replace("|«|", "\'ab", $content);
+    $content = preg_replace("|¬|", "\'ac", $content);
+//     $content = preg_replace("|foo|", "\'ad", $content); // Should be soft hyphen?
+    $content = preg_replace("|®|", "\'ae", $content);
+    $content = preg_replace("|¯|", "\'af", $content);
     $content = preg_replace("|°|", "\'b0", $content);
+    $content = preg_replace("|±|", "\'b1", $content);
+    $content = preg_replace("|²|", "\'b2", $content);
+    $content = preg_replace("|³|", "\'b3", $content);
+    $content = preg_replace("|´|", "\'b4", $content);
+    $content = preg_replace("|µ|", "\'b5", $content);
+    $content = preg_replace("|¶|", "\'b6", $content);
+    $content = preg_replace("|·|", "\'b7", $content);
+    $content = preg_replace("|¸|", "\'b8", $content);
+    $content = preg_replace("|¹|", "\'b9", $content);
+    $content = preg_replace("|º|", "\'ba", $content);
+    $content = preg_replace("|»|", "\'bb", $content);
+    $content = preg_replace("|¼|", "\'bc", $content);
+    $content = preg_replace("|½|", "\'bd", $content);
+    $content = preg_replace("|¾|", "\'be", $content);
+    $content = preg_replace("|¿|", "\'bf", $content);
+    $content = preg_replace("|À|", "\'c0", $content);
+    $content = preg_replace("|Á|", "\'c1", $content);
+    $content = preg_replace("|Â|", "\'c2", $content);
+    $content = preg_replace("|Ã|", "\'c3", $content);
+    $content = preg_replace("|Ä|", "\'c4", $content);
+    $content = preg_replace("|Å|", "\'c5", $content);
+    $content = preg_replace("|Æ|", "\'c6", $content);
+    $content = preg_replace("|Ç|", "\'c7", $content);
+    $content = preg_replace("|È|", "\'c8", $content);
+    $content = preg_replace("|É|", "\'c9", $content);
+    $content = preg_replace("|Ê|", "\'ca", $content);
+    $content = preg_replace("|Ë|", "\'cb", $content);
+    $content = preg_replace("|Ì|", "\'cc", $content);
+    $content = preg_replace("|Í|", "\'cd", $content);
+    $content = preg_replace("|Î|", "\'ce", $content);
+    $content = preg_replace("|Ï|", "\'cf", $content);
+    $content = preg_replace("|Ð|", "\'d0", $content);
+    $content = preg_replace("|Ñ|", "\'d1", $content);
+    $content = preg_replace("|Ò|", "\'d2", $content);
+    $content = preg_replace("|Ó|", "\'d3", $content);
+    $content = preg_replace("|Ô|", "\'d4", $content);
+    $content = preg_replace("|Õ|", "\'d5", $content);
+    $content = preg_replace("|Ö|", "\'d6", $content);
+    $content = preg_replace("|×|", "\'d7", $content);
+    $content = preg_replace("|Ø|", "\'d8", $content);
+    $content = preg_replace("|Ù|", "\'d9", $content);
+    $content = preg_replace("|Ú|", "\'da", $content);
+    $content = preg_replace("|Û|", "\'db", $content);
+    $content = preg_replace("|Ü|", "\'dc", $content);
+    $content = preg_replace("|Ý|", "\'dd", $content);
+    $content = preg_replace("|Þ|", "\'de", $content);
+    $content = preg_replace("|ß|", "\'df", $content);
     $content = preg_replace("|à|", "\'e0", $content);
     $content = preg_replace("|á|", "\'e1", $content);
     $content = preg_replace("|â|", "\'e2", $content);
@@ -636,7 +725,7 @@ function bookrtf_convert($content, $base_url) {
     // remove remaining tags
     $content = preg_replace("|<[^>]+>|", "", $content);
 
-    // FINAL DOCOMENT
+    // FINAL DOCUMENT
     $content = "{" . $header . "\n" . $content;
     $content .= "}";
 
