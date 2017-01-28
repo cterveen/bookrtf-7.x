@@ -218,6 +218,12 @@ function bookrtf_convert($content, $base_url) {
     }
     array_unshift($replacements, $properties);
   }
+
+  // add index
+  $front .= "\\trowd";
+  $front .= "\\cellx7000 \\cellx9028\n"; 
+  $front .= "\\intbl Index\\cell";
+  $front .= "\\qr{\\field{\*\\fldinst PAGEREF chapterIndex}}\\pard\\cell\\row\n";
     
   $front .= "}";
    
@@ -361,8 +367,56 @@ function bookrtf_convert($content, $base_url) {
   $content = preg_replace("|</?[ou]l[^>]*>|", "\\pard", $content);
   $content = preg_replace("|</li[^>]*>|", "", $content);
 
+  // INDEX
+  $replacements = array();
+  $matches = array();
+  $index = array();
+  
+  preg_match_all("|<a[^>]* name=\"index([^\"]+)\"[^>]*>|", $content, $matches, PREG_OFFSET_CAPTURE);
+  
+  for ($i = 0; $i < count($matches[0]); $i++) {
+    $label =$matches[1][$i][0];
+    $id = preg_replace("|\s|", "%20", $label);
+    $props['start'] = $matches[0][$i][1];
+    $props['length'] = strlen($matches[0][$i][0]);
+    $props['replace'] = "{\\*\\bkmkstart index".$id."}{\\*\\bkmkend index".$id."}";
+  
+    array_unshift($replacements, $props);
+    array_push($index, $label);
+  }
+  
+  // make the bookmarks
+  foreach ($replacements as $prop) {
+   $content = substr_replace($content, $prop['replace'], $prop['start'], $prop['length']);
+  }
+  
+  // add the index to the end
+  $content .= "\\par \\page \\sect\n";
+  $content .= "{\\headerr \\par \\qr Index}\n";
+  $content .= "\\fs32\\b1 ";
+  $content .= "{\\*\\bkmkstart chapterIndex}{\\*\\bkmkend chapterIndex}Index";
+  $content .= "\\b0\\fs24\n";
+  $content .= "\\sect \\sbknone \\cols2\n";
+  
+  sort($index);
+  
+  $char = "";
+  
+  // add the index
+  foreach ($index as $label) {
+    if ($char != strtoupper(substr($label, 0 , 1))) {
+      $char = strtoupper(substr($label, 0 , 1));
+      if ($char != "A") {
+        $content .= "\\par";
+      }
+      $content .= "\\fs28\\b1 " . $char . "\\b0\\fs24\\pard\n\\par ";
+    }
+    $content .= $label . " ";
+    $id = preg_replace("|\s|", "%20", $label);
+    $content .= "{\\field{\*\\fldinst PAGEREF index".$id."}}\\line\n";
+  }
+  
   // LINKS
-  // anchors, replace with index TODO
   $content = preg_replace("|<a[^>]* name=[^>]*>|", "", $content);
 
 
@@ -620,7 +674,7 @@ function bookrtf_convert($content, $base_url) {
   $content = preg_replace("|ª|", "\'aa", $content);
   $content = preg_replace("|«|", "\'ab", $content);
   $content = preg_replace("|¬|", "\'ac", $content);
-  // $content = preg_replace("|foo|", "\'ad", $content); // Should be soft hyphen?
+  // $content = preg_replace("|foo|", "\'ad", $content); // Should be soft hyphen
   $content = preg_replace("|®|", "\'ae", $content);
   $content = preg_replace("|¯|", "\'af", $content);
   $content = preg_replace("|°|", "\'b0", $content);
