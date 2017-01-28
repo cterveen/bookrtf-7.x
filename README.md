@@ -5,13 +5,11 @@ This module is in developement and curruntly mainly written as a proof of concep
 
 Currently it supports:
 - Page ends at chapter ends
-- Lists (also nested lists)
+- Lists (including nested lists)
 - Images (A4 page width only, png, possibly jpg/jpeg (not tested))
 - Tables (A4 page width only, columns all have the same width)
-- Links (tekst is shown, link is added to a footnote)
+- Links (tekst is shown, link is added to a footnote if different from the text)
 - Basic markup: bold, italic, underlined, paragraphs, h3, newlines
-- Extended ASCII characters 0x80 - 0x96; 0xb0; 0xe0 -0xff
+- Extended ASCII characters (except 0xab)
 - HTML characters: &amp;nbsp; &amp;amp;
-
-
-
+- Index (from the anchor module)
