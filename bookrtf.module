@@ -200,7 +200,7 @@ function bookrtf_convert($content, $base_url) {
         $properties[2] .= "\\b0\\fs24\n";
       }
       $front .= "\\trowd";
-      $front .= "\\cellx7000 \\cellx9028\n"; 
+      $front .= "\\cellx7000 \\cellx8309\n"; 
       $front .= "\\intbl " .$title . "\\cell";
       $front .= "\\qr{\\field{\*\\fldinst PAGEREF chapter".$match[1]."}}\\pard\\cell\\row\n";
     }
@@ -212,16 +212,16 @@ function bookrtf_convert($content, $base_url) {
     }
     else {
       // other titles of subsections
-      $properties[2] = "\\b1";
+      $properties[2] = "\\par\\sa0\\b1";
       $properties[2] .= $title;
-      $properties[2] .= "\\b0\n";
+      $properties[2] .= "\\b0\\pard\n";
     }
     array_unshift($replacements, $properties);
   }
 
   // add index
   $front .= "\\trowd";
-  $front .= "\\cellx7000 \\cellx9028\n"; 
+  $front .= "\\cellx7000 \\cellx8309\n"; 
   $front .= "\\intbl Index\\cell";
   $front .= "\\qr{\\field{\*\\fldinst PAGEREF chapterIndex}}\\pard\\cell\\row\n";
     
@@ -451,7 +451,7 @@ function bookrtf_convert($content, $base_url) {
     $content = substr_replace($content, $prop[2], $prop[0], $prop[1]);
   }
     
-  // TABLES
+  // TABLES  
   $tables = array();
   $tablestarts = array();
   $tableends = array();
@@ -459,11 +459,20 @@ function bookrtf_convert($content, $base_url) {
   preg_match_all("|</table[^>]*>|", $content, $tableends, PREG_OFFSET_CAPTURE);
 
   for ($i = 0; $i < count($tablestarts[0]); $i++) {
-    $start = $tablestarts[0][$i][1];
-    $end = $tableends[0][$i][1] + strlen($tableends[0][$i][0]);
-    $length = $end - $start;
+    $props['start'] = $tablestarts[0][$i][1];
+    $props['end'] = $tableends[0][$i][1] + strlen($tableends[0][$i][0]);
+    $props['length'] = $props['end'] - $props['start'];
+    $props['rows'] = array();
     
-    array_unshift($tables, array("start" => $start, "end" => $end, "length" => $length, "rows" => array()));
+    $matches =array();
+    preg_match("|width: (\d+)px|", $tablestarts[0][$i][0], $matches);
+    
+    if (array_key_exists(1, $matches)) {
+      $props['width'] = $matches[1] * 15;
+    }
+    
+    
+    array_unshift($tables, $props);
   }
 
   $trows = array();
@@ -500,12 +509,15 @@ function bookrtf_convert($content, $base_url) {
         
       $props = array();
       $props["content"] = substr($html, $start, $length);
-        
-      preg_match("|colspan=\"(\d+)\"|", $cellstarts[0][$j][0], $matches);
-      if (array_key_exists(1, $matches)) {
-        $props['colspan'] = $matches[1][0];
+      
+      // catch all html and css attributes
+      $matches = array();
+      preg_match_all("/\b([\w\-]+)((=\")|(:\s))([\w\s\-]+)(\"|;)/", $cellstarts[0][$j][0], $matches);
+      
+      for ($pid = 0; $pid < count($matches[0]); $pid++) {
+        $props[$matches[1][$pid]] = $matches[5][$pid];
       }
-        
+              
       array_push($cells, $props);
     }
 
@@ -519,8 +531,82 @@ function bookrtf_convert($content, $base_url) {
     
     array_push($tables[$tid]["rows"], $cells);
   }
-
+  
+  // replace the tables
   for ($tid = 0; $tid < count($tables); $tid++) {
+  
+    // get column width
+    $col_widths = array();
+    for ($i = 0; $i < $tables[$tid]["cols"]; $i++) {
+      $width = "auto";
+      $widths = array();
+            
+      foreach ($tables[$tid]["rows"] as $row) {
+        $cid = 0;
+        foreach ($row as $cell) {
+          if (array_key_exists("collspan", $cell) and $cell["colspan"] > 1) {
+            $cid += $cell["colspan"];
+            // ignore for now
+          }
+          else {
+            if ($cid == $i) {
+              if (array_key_exists("width", $cell)) {
+                // assume format \d+px
+                $cwidth = substr($cell["width"], 0 , -2);
+                array_push($widths, $cwidth);
+              }
+            }
+            $cid ++;
+          }
+        }
+      }
+      
+      if (count($widths) > 0) {
+        $width = -1;
+        foreach ($widths as $cwidth) {
+          if ($cwidth > $width) {
+            // width in twips, 1 pixel is 15 twips
+            $width = $cwidth * 15;
+          }
+        }
+      }    
+      $col_widths[$i] = $width;
+    }
+        
+    // replace auto, divide evenly    
+    $num_auto = 0;
+    $rem_width  = 8309;
+    if (array_key_exists("width", $tables[$tid])) {
+      $rem_width = $tables[$tid]["width"];
+    }
+    foreach ($col_widths as $cwidth) {
+      if ($cwidth == "auto") {
+        $num_auto++;
+      }
+      else {
+        $rem_width -= $cwidth;
+      }
+    }
+    
+    for ($i = 0; $i < count($col_widths); $i++) {
+      if ($col_widths[$i] == "auto") {
+        $col_widths[$i] = floor($rem_width/$num_auto);
+      }
+      if ($i > 0) {
+        $col_widths[$i] = $col_widths[$i-1] + $col_widths[$i];
+      }
+    }
+    
+    // scale to page width
+    $page_width = 8309;
+    $table_width = $col_widths[count($col_widths)-1];
+    
+    if ($table_width > $page_width) {
+      for ($i = 0; $i < count($col_widths); $i++) {
+        $col_widths[$i] = floor($col_widths[$i] * $page_width / $table_width);
+      }
+    }    
+     
     // construct the table
     
     // \par{\trowd
@@ -532,14 +618,14 @@ function bookrtf_convert($content, $base_url) {
     // \cellx1000
     // \cellx2000
     // \intbl{ Cel 1 }\cell 
-    // \intbl{ Cel 2 }\cell \row}
+    // \intbl{ Cel 2 }\cell \row}    
 
     $replace = "\\par{";
     
-    $col_width = round(9028/$tables[$tid]["cols"]);
-
     for ($rid = 0; $rid < count($tables[$tid]["rows"]); $rid++) {
       $replace .= "\\trowd";
+      
+      // cell width
       $j = 1;
       for ($i = 0; $i < count($tables[$tid]["rows"][$rid]); $i++) {
         if (array_key_exists("colspan", $tables[$tid]["rows"][$rid][$i])) {
@@ -547,12 +633,27 @@ function bookrtf_convert($content, $base_url) {
           $j--;
         }
 
-        $replace .= "\\cellx" . ($col_width * $j);
+        $replace .= "\\cellx" . $col_widths[$j-1];
         $j++;
       }
+      
+      // cell contents & properties
       for ($cid = 0; $cid < count($tables[$tid]["rows"][$rid]); $cid++) {
-        $replace .= "\n\\intbl";
-        $replace .= "{" . $tables[$tid]["rows"][$rid][$cid]["content"] . "}\cell";
+        $props = $tables[$tid]["rows"][$rid][$cid];
+              
+        $replace .= "\n\\intbl{";
+        if (array_key_exists("text-align", $props)) {
+          if ($props["text-align"] == "center") {
+            $replace .= "\\qc ";
+          }
+          else if ($props["text-align"] == "right") {
+            $replace .= "\\qr ";
+          }
+          else if ($props["text-align"] == "left") {
+            $replace .= "\\ql ";
+          }
+        }
+        $replace .=  $props["content"] . "}\cell";
       }
       $replace .= "\\row\n";
     }
@@ -603,7 +704,7 @@ function bookrtf_convert($content, $base_url) {
         
     // asume full page width
     // A4: 9028 twips
-    $picwidth = 9028;
+    $picwidth = 8309;
     $picheight = round($picwidth / $ratio);
 
     $replace .= "\\picwgoal".$picwidth."\\pichgoal".$picheight."\\picscalex100\\picscaley100\n";
@@ -761,6 +862,7 @@ function bookrtf_convert($content, $base_url) {
   // html
   $content = preg_replace("|&amp;|", "&", $content);
   $content = preg_replace("|&nbsp;|", " ", $content);
+  $content = preg_replace("|&#039;|", "'", $content);
 
   // non breaking space
   $content = preg_replace("|\x{C2}\x{A0}|", " ", $content);
