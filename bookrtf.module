@@ -305,37 +305,44 @@ function bookrtf_convert($content, $base_url) {
   for ($i = 0; $i < count($listitems[0]); $i++) {
     $start = $listitems[0][$i][1];
     $length = strlen($listitems[0][$i][0]);
-    $lid = -1;
+    $anchestor = -1;
+    $parent = -1;
     
-    for ($j = 0; $j < count($lists); $j++) {
-      if ($start > $lists[$j]['start'] and $start < $lists[$j]['end']) {
-        $lid = $j;
+    for ($lid = 0; $lid < count($lists); $lid++) {
+      if ($start > $lists[$lid]['start'] and $start < $lists[$lid]['end']) {
+        if ($anchestor == -1) {
+          $anchestor = $lid;
+        }
+        $parent = $lid;
       }
     }
       
-    $lists[$lid]['size']++;    
+    $lists[$anchestor]['size']++;    
     $item = 1;
-    
+    $id = 1;
     for ($k = 0; $k < count($items); $k++) {
-      if ($items[$k]['lid'] == $lid) {
+      if ($items[$k]['anchestor'] == $anchestor) {
         $item++;
+      }
+      if ($items[$k]['parent'] == $parent) {
+        $id++;
       }
     }
     
     $array = array();
     $array['start'] = $start;
     $array['length'] = $length;
-    $array['type'] = $lists[$lid]['type'];
-    $array['lid'] = $lid;
+    $array['type'] = $lists[$parent]['type'];
+    $array['anchestor'] = $anchestor;
+    $array['parent'] = $parent;
     $array['item'] = $item;
-    $array['level'] = $lists[$lid]['level'];
+    $array['level'] = $lists[$parent]['level'];
+    $array['id'] = $id;
 
     array_unshift($items, $array);
   }
 
   // replace the html the dirty way: replace by tabs, bullets and numbers based on level and item.
-
-
   for ($i = 0; $i < count($items); $i++) {
     $array = $items[$i];
     $replace = "";
@@ -343,7 +350,7 @@ function bookrtf_convert($content, $base_url) {
     $firstindent = -360;
     $lineindent = 720 + 720 * ($array['level']-1);
       
-    if ($lists[$array['lid']]['size'] == $array['item']) {
+    if ($lists[$array['anchestor']]['size'] == $array['item']) {
       $replace .= "\\par\\sa200";
     }
     else {
@@ -356,7 +363,7 @@ function bookrtf_convert($content, $base_url) {
       $replace .= "\\bullet\\tab";
     }
     else {
-      $replace .= " " . $array['item'] . ".\\tab";
+      $replace .= " " . $array['id'] . ".\\tab";
     }
     
     $replace .= "\n";
