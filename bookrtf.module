@@ -66,7 +66,9 @@ function _bookrtf_page($nid) {
       
       $page_array['index'] = array(
         '#title' => t('Download'),
-        '#markup' => t('<p>Hieronder kan het Gele Boekje worden gedownload voor offline gebruik of om uit te printen. Het bestand is automatisch gegenereerd vanuit de tekst zoals die op de website staat.</p><p>Het gele boekje is beschikbaar in twee versies:</p><ul><li><a href = "'. $url_pdf . '">Recente PDF</a><li><a href = "' . $url_rtf . '">Actuele RTF</a> (lijkt alleen goed te werken met LibreOffice)</ul>'),
+        '#markup' => t('<p>Hieronder kan het Gele Boekje worden gedownload voor offline gebruik of om uit te printen. De bestanden zijn automatisch gegenereerd vanuit de tekst zoals die op de website staat.</p><p>Het gele boekje is beschikbaar in twee versies:</p><ul><li><a href = "'. $url_pdf . '">Recente PDF</a><li><a href = "' . $url_rtf . '">Actuele RTF</a></ul><p><b>Over het RTF document</b><br>De RTF-output is experimenteel. Het bestand kan geopend worden met de meeste tekstverwerkers en lijkt goed te werken in Microsoft Word en Libreoffice Writer. Mochten er fouten optreden dan kunnen deze gemeld worden bij de internetcie.</p>
+        <p>Bij het genereren van het bestand wordt er niet gekeken naar de opmaak. Alinea\'s en tabellen kunnen echter vreemd worden afgebroken en afbeeldingen zijn niet altijd logisch geplaatst.</p>
+        <p>In Microsoft Word worden paginanummers niet standaard weergegeven. Ga naar "Afdrukken" of "Afdrukvoorbeeld" en de paginanummers verschijnen in de inhoudsopgave en de index. Mogelijk staat overal een 1, ga dan terug naar het document en nogmaals naar "Afdrukken" of "Afdrukvoorbeeld", dan zouden de nummers goed moeten staan.'),
       );
    
       return $page_array;
@@ -166,7 +168,7 @@ function bookrtf_convert($content, $base_url) {
   $front .= "Gegenereerd: " . date_format($date, "d-m-Y") . " \\par";
   $front .= "\\page\r\n";
   $front .= "\\par \\pard \\sa200 \\fs32 \\b1 Inhoud\\b0\\fs24\r\n";
-  $front .= "\\par {";
+  $front .= "\\par\\pard {";
     
     
   for ($i = 0; $i < count($chapters[0]); $i++) {
@@ -194,15 +196,15 @@ function bookrtf_convert($content, $base_url) {
       }
       else {
         $properties[2] = "\\par \\sect\r\n";
-        $properties[2] .= "{\\headerr \\par \\qr " . $title . " \\par}\r\n";
+        $properties[2] .= "{\\headerr \\par \\qr " . $title . "}\r\n";
         $properties[2] .= "\\fs32\\b1 ";
         $properties[2] .= "{\\*\\bkmkstart chapter".$match[1]."}{\\*\\bkmkend chapter".$match[1]."}" . $title;
         $properties[2] .= "\\b0\\fs24\r\n";
       }
       $front .= "\\trowd";
       $front .= "\\cellx7000 \\cellx8309\r\n"; 
-      $front .= "\\intbl " .$title . "\\cell";
-      $front .= "\\qr{\\field{\*\\fldinst PAGEREF chapter".$match[1]."}}\\pard\\cell\\row\r\n";
+      $front .= "\\intbl\\pard " .$title . "\\cell";
+      $front .= "\\qr{\\field{\*\\fldinst PAGEREF chapter".$match[1]."}}\\cell\\row\r\n";
     }
     else if ($i == 0) {
       // Title of the book doesn't start with a number but should be printed as chapter title
@@ -222,8 +224,8 @@ function bookrtf_convert($content, $base_url) {
   // add index
   $front .= "\\trowd";
   $front .= "\\cellx7000 \\cellx8309\r\n"; 
-  $front .= "\\intbl Index\\cell";
-  $front .= "\\qr{\\field{\*\\fldinst PAGEREF chapterIndex}}\\pard\\cell\\row\r\n";
+  $front .= "\\intbl\\pard Index\\cell";
+  $front .= "\\qr{\\field{\*\\fldinst PAGEREF chapterIndex}}\\cell\\row\r\n";
     
   $front .= "}";
    
@@ -651,7 +653,7 @@ function bookrtf_convert($content, $base_url) {
       for ($cid = 0; $cid < count($tables[$tid]["rows"][$rid]); $cid++) {
         $props = $tables[$tid]["rows"][$rid][$cid];
               
-        $replace .= "\r\n\\intbl{";
+        $replace .= "\r\n\\pard\\intbl";
         if (array_key_exists("text-align", $props)) {
           if ($props["text-align"] == "center") {
             $replace .= "\\qc ";
@@ -663,7 +665,7 @@ function bookrtf_convert($content, $base_url) {
             $replace .= "\\ql ";
           }
         }
-        $replace .=  $props["content"] . "}\cell";
+        $replace .=  "{" . $props["content"] . "}\\cell";
       }
       $replace .= "\\row\r\n";
     }
