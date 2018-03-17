@@ -57,7 +57,8 @@ function _bookrtf_page($nid) {
       $content = bookrtf_index_traverse($tree);
       
       $file = "sites/gele-boekje.daventria.com/files/gele-boekje.rtf";
-      $fileurl = "http://www.daventria.com/sites/gele-boekje.daventria.com/files/gele-boekje.rtf";
+      $url_rtf = "http://www.daventria.com/sites/gele-boekje.daventria.com/files/gele-boekje.rtf";
+      $url_pdf = "http://www.daventria.com/sites/gele-boekje.daventria.com/files/gele-boekje.pdf";
       
       $content = bookrtf_convert($content, $base_url);
       
@@ -65,7 +66,7 @@ function _bookrtf_page($nid) {
       
       $page_array['index'] = array(
         '#title' => t('Download'),
-        '#markup' => t('<a href = "' . $fileurl . '">Download het gele boekje</a>'),
+        '#markup' => t('<p>Hieronder kan het Gele Boekje worden gedownload voor offline gebruik of om uit te printen. Het bestand is automatisch gegenereerd vanuit de tekst zoals die op de website staat.</p><p>Het gele boekje is beschikbaar in twee versies:</p><ul><li><a href = "'. $url_pdf . '">Recente PDF</a><li><a href = "' . $url_rtf . '">Actuele RTF</a> (lijkt alleen goed te werken met LibreOffice)</ul>'),
       );
    
       return $page_array;
@@ -109,10 +110,9 @@ function bookrtf_index_traverse($tree) {
  */
 
 function bookrtf_convert($content, $base_url) {
-
-  $header = "\\rtf1\n";
+ $header = "\\rtf1\r\n";
   $header .= "\\vertdoc\\paperh16834\\paperw11909 ";
-  $header .= "\\fet0 \\ftnrstpg \\facingp\n";
+  $header .= "\\fet0 \\ftnrstpg \\facingp\r\n";
 
   // CLEAN UP
   $content = preg_replace("|([\r\n]+)\s+|", "$1", $content);
@@ -127,9 +127,9 @@ function bookrtf_convert($content, $base_url) {
   $content = preg_replace("|</?div[^>]*>[\s\r\n]*|" , "", $content);
     
   // PARAGRAPHS & NEWLINES
-  $content = preg_replace("|<p>|", "\\par \\sa200 \\qj ", $content);
+  $content = preg_replace("|<p>|", "\\par \\pard \\sa200 \\qj ", $content);
   $content = preg_replace("|</p>|", "", $content);
-  $content = preg_replace("|<br( /)?>|", "\\tab\\line\n", $content);
+  $content = preg_replace("|<br( /)?>|", "\\tab\\line\r\n", $content);
     
   // MARKUP
   $content = preg_replace("|<strong>|", "\\b ", $content);
@@ -153,19 +153,19 @@ function bookrtf_convert($content, $base_url) {
    
   // front: disclaimer on the front flyleaf
   $date = new DateTime();
-  $front = "\\page \\sect\n";
-  $front .= "\\pard\\qc \\b1 " . $book_title . "\\b0 \\line\n";
-  $front .= "R&ZV Daventria\\line\n\\line\n";
+  $front = "\\par\\sect\r\n";
+  $front .= "\\qc \\b1 " . $book_title . "\\b0 \\line\r\n";
+  $front .= "R&ZV Daventria\\line\r\n\\line\r\n";
   if (isset($base_url)) {
     $front .= $base_url;
   }
   else {
     $front .= "http://gele-boekje.daventria.com/";
   }
-  $front .= "\\line\n\\line\n";
-  $front .= "Gedownload: " . date_format($date, "d-m-Y") . " \\pard";
-  $front .= "\\page\n";
-  $front .= "\\par \\sa200 \\fs32 \\b1 Inhoud\\b0\\fs24\\pard\n";
+  $front .= "\\line\r\n\\line\r\n";
+  $front .= "Gegenereerd: " . date_format($date, "d-m-Y") . " \\par";
+  $front .= "\\page\r\n";
+  $front .= "\\par \\pard \\sa200 \\fs32 \\b1 Inhoud\\b0\\fs24\r\n";
   $front .= "\\par {";
     
     
@@ -181,49 +181,49 @@ function bookrtf_convert($content, $base_url) {
     if (preg_match("|^(\d+)\.\s|", $title, $match)) {
       // Chapter titles start with a number
       if ($i == 1) {
-        $properties[2] = "\\par \\page \\sect\n";
-        $properties[2] .= "\\pgndec\n"; 
-        $properties[2] .= "{\\headerl \\par \\ql \b1Gele boekje\b0}\n";
-        $properties[2] .= "{\\footerr \\par \\qr {\\field{\*\\fldinst  PAGE }{\\fldrslt 2}}}\n";
-        $properties[2] .= "{\\footerl \\par \\ql {\\field{\*\\fldinst  PAGE }{\\fldrslt 2}}}\n";
-        $properties[2] .= "{\\headerr \\par \\qr " . $title . "}\n";
-        $properties[2] .= "\\page\n";
+        $properties[2] = "\\par \\sect\r\n";
+        $properties[2] .= "\\pgndec\r\n"; 
+        $properties[2] .= "{\\headerl \\par \\ql \b1Gele boekje\b0 \\par}\r\n";
+        $properties[2] .= "{\\footerr \\par \\qr {\\field{\*\\fldinst  PAGE }{\\fldrslt 2}} \\par}\r\n";
+        $properties[2] .= "{\\footerl \\par \\ql {\\field{\*\\fldinst  PAGE }{\\fldrslt 2}} \\par}\r\n";
+        $properties[2] .= "{\\headerr \\par \\qr " . $title . " \\par}\r\n";
+        $properties[2] .= "\\page\r\n";
         $properties[2] .= "\\fs32\\b1 ";
         $properties[2] .= "{\\*\\bkmkstart chapter".$match[1]."}{\\*\\bkmkend chapter".$match[1]."}" . $title;
-        $properties[2] .= "\\b0\\fs24\n";
+        $properties[2] .= "\\b0\\fs24\r\n";
       }
       else {
-        $properties[2] = "\\par \\page \\sect\n";
-        $properties[2] .= "{\\headerr \\par \\qr " . $title . "}\n";
+        $properties[2] = "\\par \\sect\r\n";
+        $properties[2] .= "{\\headerr \\par \\qr " . $title . " \\par}\r\n";
         $properties[2] .= "\\fs32\\b1 ";
         $properties[2] .= "{\\*\\bkmkstart chapter".$match[1]."}{\\*\\bkmkend chapter".$match[1]."}" . $title;
-        $properties[2] .= "\\b0\\fs24\n";
+        $properties[2] .= "\\b0\\fs24\r\n";
       }
       $front .= "\\trowd";
-      $front .= "\\cellx7000 \\cellx8309\n"; 
+      $front .= "\\cellx7000 \\cellx8309\r\n"; 
       $front .= "\\intbl " .$title . "\\cell";
-      $front .= "\\qr{\\field{\*\\fldinst PAGEREF chapter".$match[1]."}}\\pard\\cell\\row\n";
+      $front .= "\\qr{\\field{\*\\fldinst PAGEREF chapter".$match[1]."}}\\pard\\cell\\row\r\n";
     }
     else if ($i == 0) {
       // Title of the book doesn't start with a number but should be printed as chapter title
       $properties[2] = "\\fs32 \\b1";
       $properties[2] .= $title;
-      $properties[2] .= "\\b0\\fs24\n";
+      $properties[2] .= "\\b0\\fs24\r\n";
     }
     else {
       // other titles of subsections
       $properties[2] = "\\par\\sa0\\b1";
       $properties[2] .= $title;
-      $properties[2] .= "\\b0\\pard\n";
+      $properties[2] .= "\\b0\\pard\r\n";
     }
     array_unshift($replacements, $properties);
   }
 
   // add index
   $front .= "\\trowd";
-  $front .= "\\cellx7000 \\cellx8309\n"; 
+  $front .= "\\cellx7000 \\cellx8309\r\n"; 
   $front .= "\\intbl Index\\cell";
-  $front .= "\\qr{\\field{\*\\fldinst PAGEREF chapterIndex}}\\pard\\cell\\row\n";
+  $front .= "\\qr{\\field{\*\\fldinst PAGEREF chapterIndex}}\\pard\\cell\\row\r\n";
     
   $front .= "}";
    
@@ -353,6 +353,9 @@ function bookrtf_convert($content, $base_url) {
     if ($lists[$array['anchestor']]['size'] == $array['item']) {
       $replace .= "\\par\\sa200";
     }
+    else if ($array['item'] == 1) {
+      $replace .= "\\par\\pard";
+    }
     else {
       $replace .= "\\par";
     }
@@ -363,15 +366,15 @@ function bookrtf_convert($content, $base_url) {
       $replace .= "\\bullet\\tab";
     }
     else {
-      $replace .= " " . $array['id'] . ".\\tab";
+      $replace .= " " . $array['id'] . ".\\tab ";
     }
     
-    $replace .= "\n";
+    $replace .= "\r\n";
    
     $content = substr_replace($content, $replace, $array['start'], $array['length']);
   }
 
-  $content = preg_replace("|</?[ou]l[^>]*>|", "\\pard", $content);
+  $content = preg_replace("|</?[ou]l[^>]*>|", "\r\n", $content);
   $content = preg_replace("|</li[^>]*>|", "", $content);
 
   // INDEX
@@ -398,12 +401,12 @@ function bookrtf_convert($content, $base_url) {
   }
   
   // add the index to the end
-  $content .= "\\par \\page \\sect\n";
-  $content .= "{\\headerr \\par \\qr Index}\n";
+  $content .= "\\par \\sect\r\n";
+  $content .= "{\\headerr \\par \\qr Index}\r\n";
   $content .= "\\fs32\\b1 ";
   $content .= "{\\*\\bkmkstart chapterIndex}{\\*\\bkmkend chapterIndex}Index";
-  $content .= "\\b0\\fs24\n";
-  $content .= "\\sect \\sbknone \\cols2\n";
+  $content .= "\\b0\\fs24\r\n";
+  $content .= "\\sect \\sbknone \\cols2\r\n";
   
   sort($index);
   
@@ -416,11 +419,11 @@ function bookrtf_convert($content, $base_url) {
       if ($char != "A") {
         $content .= "\\par";
       }
-      $content .= "\\fs28\\b1 " . $char . "\\b0\\fs24\\pard\n\\par ";
+      $content .= "\\fs28\\b1 " . $char . "\\b0\\fs24\\pard\r\n\\par ";
     }
     $content .= $label . " ";
     $id = preg_replace("|\s|", "%20", $label);
-    $content .= "{\\field{\*\\fldinst PAGEREF index".$id."}}\\line\n";
+    $content .= "{\\field{\*\\fldinst PAGEREF index".$id."}}\\line\r\n";
   }
   
   // LINKS
@@ -648,7 +651,7 @@ function bookrtf_convert($content, $base_url) {
       for ($cid = 0; $cid < count($tables[$tid]["rows"][$rid]); $cid++) {
         $props = $tables[$tid]["rows"][$rid][$cid];
               
-        $replace .= "\n\\intbl{";
+        $replace .= "\r\n\\intbl{";
         if (array_key_exists("text-align", $props)) {
           if ($props["text-align"] == "center") {
             $replace .= "\\qc ";
@@ -662,9 +665,9 @@ function bookrtf_convert($content, $base_url) {
         }
         $replace .=  $props["content"] . "}\cell";
       }
-      $replace .= "\\row\n";
+      $replace .= "\\row\r\n";
     }
-    $replace .= "}\n";
+    $replace .= "}\r\n";
 
     $content = substr_replace($content, $replace, $tables[$tid]['start'], $tables[$tid]['length']);
   }
@@ -690,16 +693,7 @@ function bookrtf_convert($content, $base_url) {
       $url = $base_url . $url;
     }
         
-    $replace = "\par{\pict";
-
-    if (substr($url, -4) == ".png") {
-      $replace .= "\pngblib ";
-    }
-    else if (substr($url, -4) == ".jpg" or substr($url, -5) == ".jpeg") {
-      $replace .= "\jpegblib ";
-    }
-        
-    // pictures should be outlined over the widt of a page.
+    // pictures should be outlined over the width of a page.
     // A4:
         
     $string = file_get_contents($url);
@@ -713,14 +707,24 @@ function bookrtf_convert($content, $base_url) {
     // A4: 9028 twips
     $picwidth = 8309;
     $picheight = round($picwidth / $ratio);
+    
+    $scalex = 100;
+    $scaley = 100;
 
-    $replace .= "\\picwgoal".$picwidth."\\pichgoal".$picheight."\\picscalex100\\picscaley100\n";
+    $replace = "\\par{\\pict\\picw".$width."\\pich".$height."\\picwgoal".$picwidth."\\pichgoal".$picheight."\\picscalex".$scalex."\\picscaley".$scaley;
+    
+    if (substr($url, -4) == ".png") {
+      $replace .= "\pngblip\r\n";
+    }
+    else if (substr($url, -4) == ".jpg" or substr($url, -5) == ".jpeg") {
+      $replace .= "\jpegblip\r\n";
+    }
 
     $hex = bin2hex($string);
-    $hex = wordwrap($hex, 80, "\n", TRUE);
+    $hex = wordwrap($hex, 80, "\r\n", TRUE);
         
     $replace .= $hex;
-    $replace .= "\n}\n";
+    $replace .= "\r\n}\r\n";
 
     $props = array();
     $props['start'] = $start;
@@ -879,7 +883,7 @@ function bookrtf_convert($content, $base_url) {
   $content = preg_replace("|<[^>]+>|", "", $content);
 
   // FINAL DOCUMENT
-  $content = "{" . $header . "\n" . $content;
+  $content = "{" . $header . "\r\n" . $content;
   $content .= "}";
 
   return $content;
