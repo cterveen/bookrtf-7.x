@@ -143,6 +143,10 @@ function bookrtf_convert($content, $base_url) {
   $content = preg_replace("|<i>|", "\\i ", $content);
   $content = preg_replace("|</i>|", "\\i0 ", $content);
   $content = preg_replace("|</?span[^>]*>|", "", $content);
+  $content = preg_replace("|<sup>|", "{\\super ", $content);
+  $content = preg_replace("|</sup>|", "}", $content);
+  $content = preg_replace("|<sub>|", "{\\sub ", $content);
+  $content = preg_replace("|</sub>|", "}", $content);
 
   // HEADERS
   $chapters = array();
@@ -275,7 +279,7 @@ function bookrtf_convert($content, $base_url) {
     // get levels
     for ($j = $i+1; $j < count($liststarts[0]); $j++) {
       if ($liststarts[0][$j][1] < $end) {
-        # table $j is nested
+        # list $j is nested
         if (array_key_exists($j, $lists)) {
           $lists[$j]['level']++;
         }
@@ -290,7 +294,7 @@ function bookrtf_convert($content, $base_url) {
       }
     }
     $j -= 1;
-    if ($j > $i+1) {
+    if ($j > $i) {
       $removed = array_splice($listends[0], $j, 1);
         
       array_splice($listends[0], $i, 0, $removed);
@@ -312,6 +316,7 @@ function bookrtf_convert($content, $base_url) {
     
     for ($lid = 0; $lid < count($lists); $lid++) {
       if ($start > $lists[$lid]['start'] and $start < $lists[$lid]['end']) {
+        # check for depth
         if ($anchestor == -1) {
           $anchestor = $lid;
         }
