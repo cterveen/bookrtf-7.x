@@ -147,8 +147,10 @@ function bookrtf_convert($content, $base_url) {
   $content = preg_replace("|</sup>|", "}", $content);
   $content = preg_replace("|<sub>|", "{\\sub ", $content);
   $content = preg_replace("|</sub>|", "}", $content);
-
-  // HEADERS
+  $content = preg_replace("|<h2>|", "\\par\\pard\\sa0\\fs28\\b1 ", $content);
+  $content = preg_replace("|</h2>|", "\\b0\\fs24\\pard\r\n", $content);
+  
+  // CHAPTERS
   $chapters = array();
   $replacements = array();
   $book_title = "";
@@ -199,7 +201,7 @@ function bookrtf_convert($content, $base_url) {
         $properties[2] .= "\\b0\\fs24\r\n";
       }
       else {
-        $properties[2] = "\\par \\sect\r\n";
+        $properties[2] = "\\par \\pard \\sect\r\n";
         $properties[2] .= "{\\headerr \\par \\qr " . $title . "}\r\n";
         $properties[2] .= "\\fs32\\b1 ";
         $properties[2] .= "{\\*\\bkmkstart chapter".$match[1]."}{\\*\\bkmkend chapter".$match[1]."}" . $title;
