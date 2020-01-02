@@ -747,6 +747,8 @@ function bookrtf_convert($content, $base_url) {
     $content = substr_replace($content, $images[$i]['replace'], $images[$i]['start'], $images[$i]['length']);
   }
 
+  // remove remaining tags
+  $content = preg_replace("|<[^>]+>|", "", $content);
 
   // SPECIAL CHARACTERS
   // extended ascii
@@ -881,15 +883,15 @@ function bookrtf_convert($content, $base_url) {
 
   // html
   $content = preg_replace("|&amp;|", "&", $content);
+  $content = preg_replace("|&deg;|", "\'b0", $content);
+  $content = preg_replace("|&gt;|", ">", $content);
+  $content = preg_replace("|&lt;|", "<", $content);
   $content = preg_replace("|&nbsp;|", " ", $content);
   $content = preg_replace("|&#039;|", "'", $content);
 
   // non breaking space
   $content = preg_replace("|\x{C2}\x{A0}|", " ", $content);
 
-  // CLEANUP
-  // remove remaining tags
-  $content = preg_replace("|<[^>]+>|", "", $content);
 
   // FINAL DOCUMENT
   $content = "{" . $header . "\r\n" . $content;
