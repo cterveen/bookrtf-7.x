@@ -4,7 +4,13 @@
  * @file
  * A  module that exports books as rtf
  */
-  
+ 
+ /**
+ * Load the PHP simple HTML DOM parser
+ *
+ * get it here: https://simplehtmldom.sourceforge.io/
+ */
+require "simple_html_dom.php";  
  
  /**
  * Implements hook_help().
@@ -79,8 +85,7 @@ function _bookrtf_page($nid) {
   }
   else {
     drupal_access_denied();
-  }
-  
+  }  
 }
 
  /**
@@ -112,644 +117,119 @@ function bookrtf_index_traverse($tree) {
  */
 
 function bookrtf_convert($content, $base_url) {
- $header = "\\rtf1\r\n";
+  // CLEAN UP spaces after newlines.
+  $content = preg_replace("|([\r\n]+)\s+|", "$1", $content);
+  
+  // Setup the parser
+  $html = str_get_html($content);
+  
+  /**
+   * HEADER
+   * - Title page
+   * - Flyleaf containing URL and date of download
+   * - Table of contents
+   * - Start of first page
+   */
+  $header = "\\rtf1\r\n";
   $header .= "\\vertdoc\\paperh16834\\paperw11909 ";
   $header .= "\\fet0 \\ftnrstpg \\facingp\r\n";
-
-  // CLEAN UP
-  $content = preg_replace("|([\r\n]+)\s+|", "$1", $content);
-  $content = preg_replace("|<\!DOCTYPE[^>]+>[\s\r\n]*|" , "", $content);
-  $content = preg_replace("|<title>[^<]+</title>[\s\r\n]*|" , "", $content);
-  $content = preg_replace("|</?html[^>]*>[\s\r\n]*|" , "", $content);
-  $content = preg_replace("|<meta[^>]+>[\s\r\n]*|" , "", $content);
-  $content = preg_replace("|<link[^>]+>[\s\r\n]*|" , "", $content);
-  $content = preg_replace("|</?head>[\s\r\n]*|" , "", $content);
-  $content = preg_replace("|</?body>[\s\r\n]*|" , "", $content);
-  $content = preg_replace("|<\!--.+[\s\r\n]*|" , "", $content);
-  $content = preg_replace("|</?div[^>]*>[\s\r\n]*|" , "", $content);
-    
-  // PARAGRAPHS & NEWLINES
-  $content = preg_replace("|<p>|", "\\par \\pard \\sa200 \\qj ", $content);
-  $content = preg_replace("|</p>|", "", $content);
-  $content = preg_replace("|<br( /)?>|", "\\tab\\line\r\n", $content);
-    
-  // MARKUP
-  $content = preg_replace("|<strong>|", "\\b ", $content);
-  $content = preg_replace("|</strong>|", "\\b0 ", $content);
-  $content = preg_replace("|<b>|", "\\b", $content);
-  $content = preg_replace("|</b>|", "\\b0 ", $content);
-  $content = preg_replace("|<u>|", "\\ul ", $content);
-  $content = preg_replace("|</u>|", "\\ul0 ", $content);
-  $content = preg_replace("|<i>|", "\\i ", $content);
-  $content = preg_replace("|</i>|", "\\i0 ", $content);
-  $content = preg_replace("|</?span[^>]*>|", "", $content);
-  $content = preg_replace("|<sup>|", "{\\super ", $content);
-  $content = preg_replace("|</sup>|", "}", $content);
-  $content = preg_replace("|<sub>|", "{\\sub ", $content);
-  $content = preg_replace("|</sub>|", "}", $content);
-  $content = preg_replace("|<h2>|", "\\par\\pard\\sa0\\fs28\\b1 ", $content);
-  $content = preg_replace("|</h2>|", "\\b0\\fs24\\pard\r\n", $content);
+  $header .= "\\sa200 \\fs32 {\\b Gele Boekje}\\fs24\r\n";
   
-  // CHAPTERS
-  $chapters = array();
-  $replacements = array();
-  $book_title = "";
-   
-  preg_match_all("|<h1[^>]*>.*?</h1>|", $content, $chapters, PREG_OFFSET_CAPTURE);
+  // flyleaf
+  $toc = $html->find("h1");
+  $book_title_element = array_shift($toc);
+  $book_title = $book_title_element->innertext;
+  $book_title_element->outertext = "";
   
-  $book_title = preg_replace("|<[^>]*>|", "", $chapters[0][0][0]);
-   
-  // front: disclaimer on the front flyleaf
+  
   $date = new DateTime();
-  $front = "\\par\\sect\r\n";
-  $front .= "\\qc \\b1 " . $book_title . "\\b0 \\line\r\n";
-  $front .= "R&ZV Daventria\\line\r\n\\line\r\n";
+  $header .= "\\par\\sect\r\n";
+  $header .= "\\qc \\b1 " . $book_title . "\\b0 \\line\r\n";
+  $header .= "R&ZV Daventria\\line\r\n\\line\r\n";
   if (isset($base_url)) {
-    $front .= $base_url;
+    $header .= $base_url;
   }
   else {
-    $front .= "http://gele-boekje.daventria.com/";
+    $header .= "http://gele-boekje.daventria.com/";
   }
-  $front .= "\\line\r\n\\line\r\n";
-  $front .= "Gegenereerd: " . date_format($date, "d-m-Y") . " \\par";
-  $front .= "\\page\r\n";
-  $front .= "\\par \\pard \\sa200 \\fs32 \\b1 Inhoud\\b0\\fs24\r\n";
-  $front .= "\\par\\pard {";
-    
-    
-  for ($i = 0; $i < count($chapters[0]); $i++) {
-    $properties = array();
-    $properties[0] = $chapters[0][$i][1];
-    $properties[1] = strlen($chapters[0][$i][0]);
-     
-    $title = preg_replace("|<[^>]*>|", "", $chapters[0][$i][0]);
-     
-    $match = array();
-       
-    if (preg_match("|^(\d+)\.\s|", $title, $match)) {
-      // Chapter titles start with a number
-      if ($i == 1) {
-        $properties[2] = "\\par \\sect\r\n";
-        $properties[2] .= "\\pgndec\r\n"; 
-        $properties[2] .= "{\\headerl \\par \\ql \b1Gele boekje\b0 \\par}\r\n";
-        $properties[2] .= "{\\footerr \\par \\qr {\\field{\*\\fldinst  PAGE }{\\fldrslt 2}} \\par}\r\n";
-        $properties[2] .= "{\\footerl \\par \\ql {\\field{\*\\fldinst  PAGE }{\\fldrslt 2}} \\par}\r\n";
-        $properties[2] .= "{\\headerr \\par \\qr " . $title . " \\par}\r\n";
-        $properties[2] .= "\\page\r\n";
-        $properties[2] .= "\\fs32\\b1 ";
-        $properties[2] .= "{\\*\\bkmkstart chapter".$match[1]."}{\\*\\bkmkend chapter".$match[1]."}" . $title;
-        $properties[2] .= "\\b0\\fs24\r\n";
-      }
-      else {
-        $properties[2] = "\\par \\pard \\sect\r\n";
-        $properties[2] .= "{\\headerr \\par \\qr " . $title . "}\r\n";
-        $properties[2] .= "\\fs32\\b1 ";
-        $properties[2] .= "{\\*\\bkmkstart chapter".$match[1]."}{\\*\\bkmkend chapter".$match[1]."}" . $title;
-        $properties[2] .= "\\b0\\fs24\r\n";
-      }
-      $front .= "\\trowd";
-      $front .= "\\cellx7000 \\cellx8309\r\n"; 
-      $front .= "\\intbl\\pard " .$title . "\\cell";
-      $front .= "\\qr{\\field{\*\\fldinst PAGEREF chapter".$match[1]."}}\\cell\\row\r\n";
-    }
-    else if ($i == 0) {
-      // Title of the book doesn't start with a number but should be printed as chapter title
-      $properties[2] = "\\fs32 \\b1";
-      $properties[2] .= $title;
-      $properties[2] .= "\\b0\\fs24\r\n";
-    }
-    else {
-      // other titles of subsections
-      $properties[2] = "\\par\\sa0\\b1";
-      $properties[2] .= $title;
-      $properties[2] .= "\\b0\\pard\r\n";
-    }
-    array_unshift($replacements, $properties);
-  }
-
-  // add index
-  $front .= "\\trowd";
-  $front .= "\\cellx7000 \\cellx8309\r\n"; 
-  $front .= "\\intbl\\pard Index\\cell";
-  $front .= "\\qr{\\field{\*\\fldinst PAGEREF chapterIndex}}\\cell\\row\r\n";
-    
-  $front .= "}";
-   
-  // add all the front stuff to the second title
-  $replacements[count($replacements)-2][2] = $front . $replacements[count($replacements)-2][2];
-
-  foreach ($replacements as $prop) {
-    $content = substr_replace($content, $prop[2], $prop[0], $prop[1]);
-  }
-      
-  // LISTS
-  $lists = array();
-  $items = array();
-
-  // get lists info
-  $liststarts = array();
-  $listends = array();
-  $listitems = array();
-
-
-  preg_match_all("|<[ou]l[^>]*>|", $content, $liststarts, PREG_OFFSET_CAPTURE);
-  preg_match_all("|</[ou]l[^>]*>|", $content, $listends, PREG_OFFSET_CAPTURE);
-  preg_match_all("|<li[^>]*>|", $content, $listitems, PREG_OFFSET_CAPTURE);
-
-  for ($i = 0; $i < count($liststarts[0]); $i++) {
-    if (substr($liststarts[0][$i][0], 0, 3) == "<ul") {
-      $lists[$i]['type'] = "ul";
-    }
-    else {
-      $lists[$i]['type'] = "ol";
-    }
-
-    // get start position & length
-    $lists[$i]['start'] = $liststarts[0][$i][1];
-    $lists[$i]['startlength'] = strlen($liststarts[0][$i][0]);
-    $lists[$i]['size'] = 0;
-    
-    if (!array_key_exists("level", $lists[$i])) {
-      $lists[$i]['level'] = 1;
-    }
-    
-    // get end
-    
-    $end = $listends[0][$i][1];
-    $endlength = strlen($listends[0][$i][0]);
-    
-    // get levels
-    for ($j = $i+1; $j < count($liststarts[0]); $j++) {
-      if ($liststarts[0][$j][1] < $end) {
-        # list $j is nested
-        if (array_key_exists($j, $lists)) {
-          $lists[$j]['level']++;
-        }
-        else {
-          $lists[$j]['level'] = 2;
-        }
-        $end = $listends[0][$j][1];
-        $endlength = strlen($listends[0][$j-1][0]);
-      }
-      else {
-        break;
-      }
-    }
-    $j -= 1;
-    if ($j > $i) {
-      $removed = array_splice($listends[0], $j, 1);
-        
-      array_splice($listends[0], $i, 0, $removed);
-    }
-    
-    //   $lists[$j]['level']++;
-    
-    // get end position & length
-    $lists[$i]['end'] = $end;
-    $lists[$i]['endlength'] = $endlength;
-  }
-
-  // get listitems
-  for ($i = 0; $i < count($listitems[0]); $i++) {
-    $start = $listitems[0][$i][1];
-    $length = strlen($listitems[0][$i][0]);
-    $anchestor = -1;
-    $parent = -1;
-    
-    for ($lid = 0; $lid < count($lists); $lid++) {
-      if ($start > $lists[$lid]['start'] and $start < $lists[$lid]['end']) {
-        # check for depth
-        if ($anchestor == -1) {
-          $anchestor = $lid;
-        }
-        $parent = $lid;
-      }
-    }
-      
-    $lists[$anchestor]['size']++;    
-    $item = 1;
-    $id = 1;
-    for ($k = 0; $k < count($items); $k++) {
-      if ($items[$k]['anchestor'] == $anchestor) {
-        $item++;
-      }
-      if ($items[$k]['parent'] == $parent) {
-        $id++;
-      }
-    }
-    
-    $array = array();
-    $array['start'] = $start;
-    $array['length'] = $length;
-    $array['type'] = $lists[$parent]['type'];
-    $array['anchestor'] = $anchestor;
-    $array['parent'] = $parent;
-    $array['item'] = $item;
-    $array['level'] = $lists[$parent]['level'];
-    $array['id'] = $id;
-
-    array_unshift($items, $array);
-  }
-
-  // replace the html the dirty way: replace by tabs, bullets and numbers based on level and item.
-  for ($i = 0; $i < count($items); $i++) {
-    $array = $items[$i];
-    $replace = "";
-    
-    $firstindent = -360;
-    $lineindent = 720 + 720 * ($array['level']-1);
-      
-    if ($lists[$array['anchestor']]['size'] == $array['item']) {
-      $replace .= "\\par\\sa200";
-    }
-    else if ($array['item'] == 1) {
-      $replace .= "\\par\\pard";
-    }
-    else {
-      $replace .= "\\par";
-    }
-      
-    $replace .= "\\fi" . $firstindent . "\\li". $lineindent;
- 
-    if ($array['type'] == "ul") {
-      $replace .= "\\bullet\\tab";
-    }
-    else {
-      $replace .= " " . $array['id'] . ".\\tab ";
-    }
-    
-    $replace .= "\r\n";
-   
-    $content = substr_replace($content, $replace, $array['start'], $array['length']);
-  }
-
-  $content = preg_replace("|</?[ou]l[^>]*>|", "\r\n", $content);
-  $content = preg_replace("|</li[^>]*>|", "", $content);
-
-  // INDEX
-  $replacements = array();
-  $matches = array();
-  $index = array();
+  $header .= "\\line\r\n\\line\r\n";
+  $header .= "Gegenereerd: " . date_format($date, "d-m-Y") . " \\par";
+  $header .= "\\page\r\n";
+  $header .= "\\par \\pard \\sa200 \\fs32 {\\b Inhoud}\\fs24\r\n";
+  $header .= "\\par\\pard {";
   
-  preg_match_all("|<a[^>]* name=\"index([^\"]+)\"[^>]*>|", $content, $matches, PREG_OFFSET_CAPTURE);
   
-  for ($i = 0; $i < count($matches[0]); $i++) {
-    $label =$matches[1][$i][0];
-    $id = preg_replace("|\s|", "%20", $label);
-    $props['start'] = $matches[0][$i][1];
-    $props['length'] = strlen($matches[0][$i][0]);
-    $props['replace'] = "{\\*\\bkmkstart index".$id."}{\\*\\bkmkend index".$id."}";
-  
-    array_unshift($replacements, $props);
-    array_push($index, $label);
+  foreach ($toc as $e) {
+    // Assume title starts with the chapternumber
+    $title = $e->innertext;
+    preg_match("|^(\d+)\.\s|", $title, $match);
+    $chapter = $match[1];
+    
+    $header .= "\\trowd";
+    $header .= "\\cellx7000 \\cellx8309\r\n"; 
+    $header .= "\\intbl\\pard " .$title . "\\cell";
+    $header .= "\\qr{\\field{\*\\fldinst PAGEREF chapter".$chapter."}}\\cell\\row\r\n";
+    
   }
   
-  // make the bookmarks
-  foreach ($replacements as $prop) {
-   $content = substr_replace($content, $prop['replace'], $prop['start'], $prop['length']);
+  $header .= "\\trowd";
+  $header .= "\\cellx7000 \\cellx8309\r\n"; 
+  $header .= "\\intbl\\pard Index\\cell";
+  $header .= "\\qr{\\field{\*\\fldinst PAGEREF chapterIndex}}\\cell\\row\r\n";
+  $header .= "}";
+  
+  
+  /**
+   *Footer
+   * - index
+   */
+  
+  $footer = "\\par \\sect\r\n";
+  $footer .= "{\\headerr \\par \\qr Index}\r\n";
+  $footer .= "\\fs32\\b1 ";
+  $footer .= "{\\*\\bkmkstart chapterIndex}{\\*\\bkmkend chapterIndex}Index";
+  $footer .= "\\b0\\fs24\r\n";
+  $footer .= "\\sect \\sbknone \\cols2\r\n";  
+  
+  $anchors = $html->find('a[name]');
+  $terms = array();
+  foreach ($anchors as $a) {
+    $label = $a->name;
+    if (preg_match("|^index|", $label)) {
+      $label = substr($label, 5);
+      array_push($terms, $label);
+    }
+  }
+  sort($terms);
+  
+  $initial = "";
+  foreach ($terms as $t) {
+    if ($initial != substr($t, 0, 1)) {
+      if ($initial != "") {
+        $footer .= "\\par";
+      }
+      $initial = substr($t, 0, 1);
+      $footer .= "\\fs28{\\b " . $initial . "\\b}\\fs24\\pard\r\n\\par ";
+    }
+    $footer .= $t . " {\\field{\*\\fldinst PAGEREF index".urlencode($t)."}}\\line\r\n";
   }
   
-  // add the index to the end
-  $content .= "\\par \\sect\r\n";
-  $content .= "{\\headerr \\par \\qr Index}\r\n";
-  $content .= "\\fs32\\b1 ";
-  $content .= "{\\*\\bkmkstart chapterIndex}{\\*\\bkmkend chapterIndex}Index";
-  $content .= "\\b0\\fs24\r\n";
-  $content .= "\\sect \\sbknone \\cols2\r\n";
+  /** 
+  * Start changing the content from HTML into RTF
+  *
+  * The tough work is going to be done by bookrtf_traverse. 
+  */
   
-  sort($index);
+
+  $elements = $html->find('html');
+  bookrtf_traverse($elements, $base_url);  
   
-  $char = "";
+  // strip all remaining tags
+  $html = strip_tags($html);
   
-  // add the index
-  foreach ($index as $label) {
-    if ($char != strtoupper(substr($label, 0 , 1))) {
-      $char = strtoupper(substr($label, 0 , 1));
-      if ($char != "A") {
-        $content .= "\\par";
-      }
-      $content .= "\\fs28\\b1 " . $char . "\\b0\\fs24\\pard\r\n\\par ";
-    }
-    $content .= $label . " ";
-    $id = preg_replace("|\s|", "%20", $label);
-    $content .= "{\\field{\*\\fldinst PAGEREF index".$id."}}\\line\r\n";
-  }
+  // dumb the new code back to $content
+  $content = $html;
   
-  // LINKS
-  $content = preg_replace("|<a[^>]* name=[^>]*>|", "", $content);
-
-
-  // remove internal links
-  $content = preg_replace("|<a[^>]*style=\"float: right\">(.*?)</a>|", "", $content);
-
-  // replace external links and mailtos with footnote    
-  $links = array();
-  $replacements = array();
-
-  preg_match_all(";<a[^>]* href=\"((http://|mailto:)[^\"]*)\"[^>]*>(.*?)</a>;", $content, $links, PREG_OFFSET_CAPTURE);
-
-  for ($i = 0; $i < count($links[0]); $i++) {
-    $properties[0] = $links[0][$i][1];
-    $properties[1] = strlen($links[0][$i][0]);
-      
-    $url = $links[1][$i][0];
-    $title = $links[3][$i][0];
-      
-    // no use to add a footnote if the title and link have the same information
-    if (preg_match("|^(http://)?(mailto:)?" . $title . "/?$|", $url)) {
-      $properties[2] = $title;
-    }
-    else {
-      $properties[2] = $title . "{\\footnote \\pard {\\up6 \\chftn} " . $url . "}"; 
-    }
-      
-    array_unshift($replacements, $properties);
-  }
-    
-  foreach ($replacements as $prop) {
-    $content = substr_replace($content, $prop[2], $prop[0], $prop[1]);
-  }
-    
-  // TABLES  
-  $tables = array();
-  $tablestarts = array();
-  $tableends = array();
-  preg_match_all("|<table[^>]*>|", $content, $tablestarts, PREG_OFFSET_CAPTURE);
-  preg_match_all("|</table[^>]*>|", $content, $tableends, PREG_OFFSET_CAPTURE);
-
-  for ($i = 0; $i < count($tablestarts[0]); $i++) {
-    $props['start'] = $tablestarts[0][$i][1];
-    $props['end'] = $tableends[0][$i][1] + strlen($tableends[0][$i][0]);
-    $props['length'] = $props['end'] - $props['start'];
-    $props['rows'] = array();
-    
-    $matches =array();
-    preg_match("|width: (\d+)px|", $tablestarts[0][$i][0], $matches);
-    
-    if (array_key_exists(1, $matches)) {
-      $props['width'] = $matches[1] * 15;
-    }
-    
-    
-    array_unshift($tables, $props);
-  }
-
-  $trows = array();
-  $trowsstart = array();
-  $trowsend = array();
-  preg_match_all("|<tr[^>]*>|", $content, $trowsstart, PREG_OFFSET_CAPTURE);
-  preg_match_all("|</tr>|", $content, $trowsend, PREG_OFFSET_CAPTURE);
-
-  for ($i = 0; $i < count($trowsstart[0]); $i++) {
-    $start = $trowsstart[0][$i][1];
-    $length = strlen($trowsstart[0][$i][0]);
-    $end = $trowsend[0][$i][1];
-    $tid = -1;
-
-    for ($j = 0; $j < count($tables); $j++) {
-      if ($start > $tables[$j]["start"] and $start < $tables[$j]["end"]) {
-        $tid = $j;
-        break;
-      }
-    }
-
-    $html = substr($content, $start, $end-$start);
-    
-    $cells = array();
-    $cellstarts = array();
-    $cellends = array();
-    preg_match_all("|<t[dh][^>]*>|", $html, $cellstarts, PREG_OFFSET_CAPTURE);
-    preg_match_all("|</t[dh][^>]*>|", $html, $cellends, PREG_OFFSET_CAPTURE);
-    
-    for ($j = 0; $j < count($cellstarts[0]); $j++) {
-      $start = $cellstarts[0][$j][1] + strlen($cellstarts[0][$j][0]);
-      $end = $cellends[0][$j][1];
-      $length = $end - $start;
-        
-      $props = array();
-      $props["content"] = substr($html, $start, $length);
-      
-      // catch all html and css attributes
-      $matches = array();
-      preg_match_all("/\b([\w\-]+)((=\")|(:\s))([\w\s\-]+)(\"|;)/", $cellstarts[0][$j][0], $matches);
-      
-      for ($pid = 0; $pid < count($matches[0]); $pid++) {
-        $props[$matches[1][$pid]] = $matches[5][$pid];
-      }
-              
-      array_push($cells, $props);
-    }
-
-    $cols = count($cells);
-    if (!array_key_exists("cols", $tables[$tid])) {
-        $tables[$tid]["cols"] = $cols;
-    }
-    else if ($cols > $tables[$tid]["cols"]) {
-        $tables[$tid]["cols"] = $cols;
-    }
-    
-    array_push($tables[$tid]["rows"], $cells);
-  }
-  
-  // replace the tables
-  for ($tid = 0; $tid < count($tables); $tid++) {
-  
-    // get column width
-    $col_widths = array();
-    for ($i = 0; $i < $tables[$tid]["cols"]; $i++) {
-      $width = "auto";
-      $widths = array();
-            
-      foreach ($tables[$tid]["rows"] as $row) {
-        $cid = 0;
-        foreach ($row as $cell) {
-          if (array_key_exists("collspan", $cell) and $cell["colspan"] > 1) {
-            $cid += $cell["colspan"];
-            // ignore for now
-          }
-          else {
-            if ($cid == $i) {
-              if (array_key_exists("width", $cell)) {
-                // assume format \d+px
-                $cwidth = substr($cell["width"], 0 , -2);
-                array_push($widths, $cwidth);
-              }
-            }
-            $cid ++;
-          }
-        }
-      }
-      
-      if (count($widths) > 0) {
-        $width = -1;
-        foreach ($widths as $cwidth) {
-          if ($cwidth > $width) {
-            // width in twips, 1 pixel is 15 twips
-            $width = $cwidth * 15;
-          }
-        }
-      }    
-      $col_widths[$i] = $width;
-    }
-        
-    // replace auto, divide evenly    
-    $num_auto = 0;
-    $rem_width  = 8309;
-    if (array_key_exists("width", $tables[$tid])) {
-      $rem_width = $tables[$tid]["width"];
-    }
-    foreach ($col_widths as $cwidth) {
-      if ($cwidth == "auto") {
-        $num_auto++;
-      }
-      else {
-        $rem_width -= $cwidth;
-      }
-    }
-    
-    for ($i = 0; $i < count($col_widths); $i++) {
-      if ($col_widths[$i] == "auto") {
-        $col_widths[$i] = floor($rem_width/$num_auto);
-      }
-      if ($i > 0) {
-        $col_widths[$i] = $col_widths[$i-1] + $col_widths[$i];
-      }
-    }
-    
-    // scale to page width
-    $page_width = 8309;
-    $table_width = $col_widths[count($col_widths)-1];
-    
-    if ($table_width > $page_width) {
-      for ($i = 0; $i < count($col_widths); $i++) {
-        $col_widths[$i] = floor($col_widths[$i] * $page_width / $table_width);
-      }
-    }    
-     
-    // construct the table
-    
-    // \par{\trowd
-    // \cellx1000
-    // \cellx2000 
-    // \intbl{ Cel 1 }\cell 
-    // \intbl{ Cel 2 }\cell \row
-    // \trowd
-    // \cellx1000
-    // \cellx2000
-    // \intbl{ Cel 1 }\cell 
-    // \intbl{ Cel 2 }\cell \row}    
-
-    $replace = "\\par{";
-    
-    for ($rid = 0; $rid < count($tables[$tid]["rows"]); $rid++) {
-      $replace .= "\\trowd";
-      
-      // cell width
-      $j = 1;
-      for ($i = 0; $i < count($tables[$tid]["rows"][$rid]); $i++) {
-        if (array_key_exists("colspan", $tables[$tid]["rows"][$rid][$i])) {
-          $j += $tables[$tid]["rows"][$rid][$i]["colspan"];
-          $j--;
-        }
-
-        $replace .= "\\cellx" . $col_widths[$j-1];
-        $j++;
-      }
-      
-      // cell contents & properties
-      for ($cid = 0; $cid < count($tables[$tid]["rows"][$rid]); $cid++) {
-        $props = $tables[$tid]["rows"][$rid][$cid];
-              
-        $replace .= "\r\n\\pard\\intbl";
-        if (array_key_exists("text-align", $props)) {
-          if ($props["text-align"] == "center") {
-            $replace .= "\\qc ";
-          }
-          else if ($props["text-align"] == "right") {
-            $replace .= "\\qr ";
-          }
-          else if ($props["text-align"] == "left") {
-            $replace .= "\\ql ";
-          }
-        }
-        $replace .=  "{" . $props["content"] . "}\\cell";
-      }
-      $replace .= "\\row\r\n";
-    }
-    $replace .= "}\r\n";
-
-    $content = substr_replace($content, $replace, $tables[$tid]['start'], $tables[$tid]['length']);
-  }
-
-
-  // IMAGES
-  // { \\pict \\pngblib \picscalex100 \picscaley100\n" . wordwrap(bin2hex($img), 80, "\n", TRUE) . "}\n"
-  $images = array();
-  $tags = array();
-
-  preg_match_all("|<img[^>]+>|", $content, $tags, PREG_OFFSET_CAPTURE);
-
-  for($i = 0; $i <count($tags[0]); $i++) {
-    $start = $tags[0][$i][1];
-    $length = strlen($tags[0][$i][0]);
-    $matches = array();
-        
-    preg_match("|src=\"([^\"]*)\"|", $tags[0][$i][0], $matches);
-
-    $url = $matches[1];
-
-    if (isset($base_url)) {
-      $url = $base_url . $url;
-    }
-        
-    // pictures should be outlined over the width of a page.
-    // A4:
-        
-    $string = file_get_contents($url);
-    $img = imagecreatefromstring($string);
-        
-    $width = imagesx($img);
-    $height = imagesy($img);
-    $ratio = $width/$height;
-        
-    // asume full page width
-    // A4: 9028 twips
-    $picwidth = 8309;
-    $picheight = round($picwidth / $ratio);
-    
-    $scalex = 100;
-    $scaley = 100;
-
-    $replace = "\\par{\\pict\\picw".$width."\\pich".$height."\\picwgoal".$picwidth."\\pichgoal".$picheight."\\picscalex".$scalex."\\picscaley".$scaley;
-    
-    if (substr($url, -4) == ".png") {
-      $replace .= "\pngblip\r\n";
-    }
-    else if (substr($url, -4) == ".jpg" or substr($url, -5) == ".jpeg") {
-      $replace .= "\jpegblip\r\n";
-    }
-
-    $hex = bin2hex($string);
-    $hex = wordwrap($hex, 80, "\r\n", TRUE);
-        
-    $replace .= $hex;
-    $replace .= "\r\n}\r\n";
-
-    $props = array();
-    $props['start'] = $start;
-    $props['length'] = $length;
-    $props['replace'] = $replace;
-        
-    array_unshift($images,$props);
-  }
-
-  for ($i = 0; $i < count($images); $i++) {
-    $content = substr_replace($content, $images[$i]['replace'], $images[$i]['start'], $images[$i]['length']);
-  }
-
-  // remove remaining tags
-  $content = preg_replace("|<[^>]+>|", "", $content);
-
   // SPECIAL CHARACTERS
   // extended ascii
   $content = preg_replace("|€|", "\'80", $content);
@@ -894,8 +374,319 @@ function bookrtf_convert($content, $base_url) {
 
 
   // FINAL DOCUMENT
-  $content = "{" . $header . "\r\n" . $content;
-  $content .= "}";
+  $content = "{" . $header . "\r\n" . $content . "\r\n" . $footer . "}";
 
   return $content;
+}
+
+/*
+ * HTML parsers may not spawn demons but if you use them to replace HTML tags
+ * by RTF code they do attract gremlins as the parser gets in trouble with
+ * nested tags (which occur a lot in HTML). Probably the parser is losing it's
+ * structure. This is solved by going through the tree and start replacing tags
+ * at the branches working up to the main stem.
+ *
+ * @param $elements 
+ *   the basic $elements from which to start
+ * @param $base_url 
+ *   The base URL of the site, needed to convert links.
+ */
+ 
+function bookrtf_traverse ($elements, $base_url) {
+  foreach ($elements as $e) {
+    if ($e->first_child()) {
+      $children = $e->children();
+      bookrtf_traverse($children, $base_url);
+    }
+    
+    // no children anymore --> start changing tags
+    $tag = $e->tag;
+    
+    switch($tag) {
+      case 'a':
+        // this could be either external links or anchors
+        if ($e->href) {
+          // external link --> replace with footnote
+          $url = $e->href;
+          $title = $e->innertext;
+          
+          // no use to add a footnote if the link and label are the same
+          if (preg_match("|^(https?://)?(mailto:)?" . $title . "/?$|", $url)) {
+            $e->innertext = $title;
+          }
+          else {
+            $e->innertext = $title . "{\\footnote \\pard {\\up6 \\chftn} " . $url . "}"; 
+          }          
+        }
+        else if ($e->name) {
+          $anchor = urlencode($e->name);
+          $e->outertext = "{\\*\\bkmkstart ".$anchor."}{\\*\\bkmkend ".$anchor."}";
+        }
+       
+        break;
+      case 'br':
+        $e->outertext = "\\tab\\line\r\n";
+        break;
+      case 'h1':
+        // start of a new chapter --> new page, right header contains chapter title, bookmark for the table of contents
+        $title = $e->innertext;
+                
+        $rtf = "\\par \\pard \\sect\r\n";
+        $rtf.= "{\\headerl \\par \\ql \b1Gele boekje\b0 \\par}\r\n";
+        $rtf .= "{\\headerr \\par \\qr " . $title . "}\r\n";
+        $rtf .= "{\\footerr \\par \\qr {\\field{\*\\fldinst  PAGE }{\\fldrslt 2}} \\par}\r\n";
+        $rtf .= "{\\footerl \\par \\ql {\\field{\*\\fldinst  PAGE }{\\fldrslt 2}} \\par}\r\n";
+        // if the chapter starts with a number it should be in the index, add a bookmark for it
+        if (preg_match("|^(\d+)\.\s|", $title, $match)) {
+          $chapter = $match[1];
+          $rtf .= "{\\*\\bkmkstart chapter".$chapter."}{\\*\\bkmkend chapter".$chapter."}";
+        }
+        $rtf .= "\\fs32{\\b " . $title . "}\\fs24\r\n";
+        
+        $e->outertext = $rtf;
+        break;
+      case 'h2':
+        $e->outertext = "\\par\\pard\\sa0\\fs28\\b1 " . $e->innertext . "\\b0\\fs24\\pard\r\n";
+        break;
+      case 'i': 
+        $e->outertext = "{\\i " . $e->innertext . "}";
+        break;
+      case 'img':
+        $url = $e->src;
+        
+        // assume relative url
+        if (isset($base_url)) {
+          $url = $base_url . $url;
+        }
+        
+        $string = file_get_contents($url);
+        $img = imagecreatefromstring($string);
+        
+        $width = imagesx($img);
+        $height = imagesy($img);
+        $ratio = $width/$height;
+        
+        // asume full page width A4 - margins = 9028 - XX  = 8309 twips
+        $picwidth = 8309;
+        $picheight = round($picwidth / $ratio);
+        $scalex = 100;
+        $scaley = 100;
+
+        $rtf = "\\par{\\pict\\picw".$width."\\pich".$height."\\picwgoal".$picwidth."\\pichgoal".$picheight."\\picscalex".$scalex."\\picscaley".$scaley;
+    
+        // set image type (jpg or png supported)
+        if (substr($url, -4) == ".png") {
+          $rtf .= "\pngblip\r\n";
+        }
+        else if (substr($url, -4) == ".jpg" or substr($url, -5) == ".jpeg") {
+          $rtf .= "\jpegblip\r\n";
+        }
+
+        $hex = bin2hex($string);
+        $hex = wordwrap($hex, 80, "\r\n", TRUE);
+        
+        $rtf .= $hex;
+        $rtf .= "\r\n}\r\n";
+        
+        $e->outertext = $rtf;
+        break;
+      case 'li':
+        /**
+         * This might be a bit dirty but as I'm not going to make elaborate
+         * list structures I feel confident working from li backwards and
+         * strip out the list-tags later.
+         */
+         
+        $level = 0;
+        $type = "ul";
+        $number = 1;
+        $last = 1;
+        
+        // Type, level
+        $p = $e->parent();
+        while($p) {
+          if ($p->tag == "ul" | $p->tag == "ol") {
+            if ($level == 0) {
+              $type = $p->tag;
+            }
+            $level++;
+          }
+          $p = $p->parent();
+        }
+        // Item number
+        $s = $e->prev_sibling();
+        while($s) {
+          if ($s->tag == "li") {
+            $number++;
+          }
+          $s = $s->prev_sibling();
+        }
+        // Last item?
+        $s = $e->next_sibling();
+        while($s) {
+          if ($s->tag == "li") {
+            $last = 0;
+            break;
+          }
+          $s = $s->next_sibling();
+        }
+        
+        // Not the last item if there's another nested list!
+        // TODO: this goes wrong in something like <li>text<ol><li>...</ol>some
+        // more text but why do you want to make a list like that?
+        $c = $e->children(0);
+        if ($c) {
+          if ($c->tag == 'ol' | $c->tag == 'ul') {
+            $last = 0;
+          }
+        }
+        
+        $rtf = "";
+        if ($last == 1 & $level == 1) {
+          $rtf .= "\\par\\sa200";
+        }
+        else {
+          $rtf .= "\\par\\pard";
+        }
+        
+        $firstindent = -360;
+        $lineindent = 720 * $level;
+        
+        $rtf .= "\\fi" . $firstindent . "\\li". $lineindent;
+        if ($type == "ul") {
+          $rtf .= "\\bullet\\tab ";
+        }
+        else {
+          $rtf .= " " . $array['id'] . ".\\tab ";
+        }
+        $rtf .= $e->innertext;
+        $rtf .= "\r\n";
+        
+        $e->outertext = $rtf;
+        break;
+      case 'p':
+        $e->outertext = "\\par \\pard \\sa200 \\qj " . $e->innertext;
+        break;
+      case 'strong': 
+        $e->outertext = "{\\b " . $e->innertext . "}";
+        break;
+      case 'sub':
+        $e->outertext = "{\\sub " . $e->innertext . "}";
+        break;
+      case 'sup': 
+        $e->outertext = "{\\super " . $e->innertext . "}";
+        break;
+      case 'tbody':
+        /**
+         * Tables are a little bit more complicated than lists. I do not feel
+         * confident working backwards from cells. Better to store the whole
+         * table and than put it down again.
+         */
+         
+        $width_in_twips = 8309;
+        $width_in_pixels = 600;
+        $num_rows = 0;
+        $num_cols = 0;
+        $table;
+        $colwidth = array();
+        
+
+        // retrieve table contents and some required specifications
+        $rows = $e->children();
+        foreach ($rows as $r) {
+          if ($r->tag != "tr") {
+            continue;
+          }
+          $num_rows++;
+          $cells = $r->children();
+          $cur_cols = 0;
+          foreach ($cells as $c) {
+            if ($c->tag != 'td' & $c->tag != 'th') {
+              continue;
+            }
+            $cur_cols++;
+            $table[$num_rows][$cur_cols]['innertext'] = $c->innertext;
+            $table[$num_rows][$cur_cols]['col'] = $cur_cols;
+            if ($c->colspan) {
+              $table[$num_rows][$cur_cols]['colspan'] = $c->colspan;
+            }
+            else {
+              $table[$num_rows][$cur_cols]['colspan'] = 1;
+            }
+            
+            // Does using regexp for css also spawn demons?
+            if ($c->style) {
+              $style = array();
+              preg_match_all("/([\w\-]+):\s([\w\s\-]+);?/", $c->style, $matches);
+              
+              for ($pid = 0; $pid < count($matches[0]); $pid++) {
+                $style[$matches[1][$pid]] = $matches[2][$pid];
+              }
+              
+              if(array_key_exists("width", $style)) {
+                // asume width in pixels -> make percentage.
+                if (substr($style['width'], -2) == "px") {
+                  $width = substr($style['width'], 0, -2);
+                  $colwidth[$cur_cols] = $width / $width_in_pixels;
+                }                
+              }
+            }
+            
+            // correct cur_cols for colspan.
+            $cur_cols += $table[$num_rows][$cur_cols]['colspan']-1;
+          }
+          if ($cur_cols > $num_cols) {
+            $num_cols = $cur_cols;
+          }
+        }
+        
+        // some complicated stuff to calculate column widths
+        $colright = array();
+        $widthdefined = 0;
+        $auto = 0;
+        for ($col = 1; $col <= $num_cols; $col++) {
+          if (array_key_exists($col, $colwidth)) {
+            $widthdefined += $colwidth[$col];
+          }
+          else {
+            $auto++;
+          }
+        }
+        $autowidth = (1 - $widthdefined)/$auto;
+        
+        $colleft = 0;
+        for ($col = 1; $col <= $num_cols; $col++) {
+          if (array_key_exists($col, $colwidth)) {
+            $colleft += $colwidth[$col];
+          }
+          else {
+            $colleft += $autowidth;
+          }
+          $colright[$col] = $colleft;
+        }
+        
+        // now we have the info start building it up again
+        $rtf = "\par{";
+        foreach ($table as $row) {
+          $rtf .= "\\trowd";
+          foreach ($row as $cell) {
+            $rtf .= "\\cellx";
+            $rtf .= floor($width_in_twips * $colright[$cell['col']+$cell['colspan']-1]);
+          }
+          foreach ($row as $cell) {
+            $rtf .= "\\intbl{" . $cell['innertext'] . "}\\cell\r\n";
+          }
+          $rtf .= "\\row";
+        }
+        $rtf .= "}\r\n";
+  
+        $e->outertext = $rtf;
+        break;
+      case 'title':
+        $e->outertext = "";
+        break;
+      case 'u':
+        $e->outertext = "{\\u " . $e->innertext . "}";
+    }    
+  }
 }
