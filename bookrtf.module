@@ -122,19 +122,27 @@ function bookrtf_convert($content, $base_url) {
   
   // Setup the parser
   $html = str_get_html($content);
-  
+    
   /**
    * HEADER
-   * - Title page
+   * - Front page
    * - Flyleaf containing URL and date of download
    * - Table of contents
    * - Start of first page
-   */
+   */   
+   
   $header = "\\rtf1\r\n";
   $header .= "\\vertdoc\\paperh16834\\paperw11909 ";
   $header .= "\\fet0 \\ftnrstpg \\facingp\r\n";
-  $header .= "\\sa200 \\fs32 {\\b Gele Boekje}\\fs24\r\n";
   
+  // preparing to make this a form element
+  $front_page = "<html><body><h3>Gele Boekje</h3><br><br><br><img src=\"/sites/gele-boekje.daventria.com/files/logo.png\" /></body></html>";
+  $title_html = str_get_html($front_page);
+  $elements = $title_html->find('html');
+  bookrtf_traverse($elements, $base_url);
+  $title_html = strip_tags($title_html);
+  $header .= $title_html;
+
   // flyleaf
   $toc = $html->find("h1");
   $book_title_element = array_shift($toc);
@@ -157,8 +165,7 @@ function bookrtf_convert($content, $base_url) {
   $header .= "\\page\r\n";
   $header .= "\\par \\pard \\sa200 \\fs32 {\\b Inhoud}\\fs24\r\n";
   $header .= "\\par\\pard {";
-  
-  
+    
   foreach ($toc as $e) {
     // Assume title starts with the chapternumber
     $title = $e->innertext;
@@ -169,7 +176,6 @@ function bookrtf_convert($content, $base_url) {
     $header .= "\\cellx7000 \\cellx8309\r\n"; 
     $header .= "\\intbl\\pard " .$title . "\\cell";
     $header .= "\\qr{\\field{\*\\fldinst PAGEREF chapter".$chapter."}}\\cell\\row\r\n";
-    
   }
   
   $header .= "\\trowd";
@@ -177,7 +183,6 @@ function bookrtf_convert($content, $base_url) {
   $header .= "\\intbl\\pard Index\\cell";
   $header .= "\\qr{\\field{\*\\fldinst PAGEREF chapterIndex}}\\cell\\row\r\n";
   $header .= "}";
-  
   
   /**
    *Footer
@@ -202,25 +207,26 @@ function bookrtf_convert($content, $base_url) {
   }
   sort($terms);
   
-  $initial = "";
+  $cur_initial = "";
   foreach ($terms as $t) {
-    if ($initial != substr($t, 0, 1)) {
-      if ($initial != "") {
+    $initial = substr($t, 0, 1);
+    if (is_numeric($initial)) {
+      $initial = "#";
+    }
+    if ($initial != $cur_initial) {
+      if ($cur_initial != "") {
         $footer .= "\\par";
       }
-      $initial = substr($t, 0, 1);
       $footer .= "\\fs28{\\b " . $initial . "\\b}\\fs24\\pard\r\n\\par ";
+      $cur_initial = $initial;
     }
     $footer .= $t . " {\\field{\*\\fldinst PAGEREF index".urlencode($t)."}}\\line\r\n";
   }
   
   /** 
   * Start changing the content from HTML into RTF
-  *
   * The tough work is going to be done by bookrtf_traverse. 
   */
-  
-
   $elements = $html->find('html');
   bookrtf_traverse($elements, $base_url);  
   
@@ -229,6 +235,9 @@ function bookrtf_convert($content, $base_url) {
   
   // dumb the new code back to $content
   $content = $html;
+  
+  // FINAL DOCUMENT
+  $content = "{" . $header . "\r\n" . $content . "\r\n" . $footer . "}";
   
   // SPECIAL CHARACTERS
   // extended ascii
@@ -373,22 +382,21 @@ function bookrtf_convert($content, $base_url) {
   $content = preg_replace("|\x{C2}\x{A0}|", " ", $content);
 
 
-  // FINAL DOCUMENT
-  $content = "{" . $header . "\r\n" . $content . "\r\n" . $footer . "}";
+
 
   return $content;
 }
 
-/*
+/**
  * HTML parsers may not spawn demons but if you use them to replace HTML tags
  * by RTF code they do attract gremlins as the parser gets in trouble with
  * nested tags (which occur a lot in HTML). Probably the parser is losing it's
  * structure. This is solved by going through the tree and start replacing tags
  * at the branches working up to the main stem.
  *
- * @param $elements 
+ * @param elements 
  *   the basic $elements from which to start
- * @param $base_url 
+ * @param base_url 
  *   The base URL of the site, needed to convert links.
  */
  
@@ -412,10 +420,10 @@ function bookrtf_traverse ($elements, $base_url) {
           
           // no use to add a footnote if the link and label are the same
           if (preg_match("|^(https?://)?(mailto:)?" . $title . "/?$|", $url)) {
-            $e->innertext = $title;
+            $e->outertext = $title;
           }
           else {
-            $e->innertext = $title . "{\\footnote \\pard {\\up6 \\chftn} " . $url . "}"; 
+            $e->outertext = $title . "{\\footnote \\pard {\\up6 \\chftn} " . $url . "}"; 
           }          
         }
         else if ($e->name) {
@@ -448,6 +456,9 @@ function bookrtf_traverse ($elements, $base_url) {
       case 'h2':
         $e->outertext = "\\par\\pard\\sa0\\fs28\\b1 " . $e->innertext . "\\b0\\fs24\\pard\r\n";
         break;
+      case 'h3': 
+        $e->outertext = "\\par\\pard\\sa0\\fs32 \\qc {\\b " . $e->innertext . "}\\fs24\ \pard\r\n";     
+        break;
       case 'i': 
         $e->outertext = "{\\i " . $e->innertext . "}";
         break;
@@ -460,6 +471,7 @@ function bookrtf_traverse ($elements, $base_url) {
         }
         
         $string = file_get_contents($url);
+        
         $img = imagecreatefromstring($string);
         
         $width = imagesx($img);
