@@ -6,11 +6,16 @@
  */
  
  /**
- * Load the PHP simple HTML DOM parser
+ * Load the PHP simple HTML DOM parser if not done yet
+ * Somehow include_once does not work as I expect, check whether function
+ * str_get_html exist. This might potentially break if someone else uses
+ * the same function name.
  *
  * get it here: https://simplehtmldom.sourceforge.io/
  */
-require "simple_html_dom.php";  
+if (!function_exists("str_get_html")) {
+  include("simple_html_dom.php");
+}
  
  /**
  * Implements hook_help().
@@ -116,8 +121,12 @@ function bookrtf_index_traverse($tree) {
  */
 
 function bookrtf_convert($content, $base_url) {
+  // put some html tags around it so we can push it into the html converter.
+  $content = "<html><body>" . $content . "</body></html>";
+  
   // CLEAN UP spaces after newlines.
   $content = preg_replace("|([\r\n]+)\s+|", "$1", $content);
+  
   
   // Setup the parser
   $html = str_get_html($content);
