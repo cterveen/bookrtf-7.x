@@ -31,7 +31,6 @@ function bookrtf_help($path, $arg) {
   }
 }
 
-
 /**
 * Implements hook_menu().
 */
@@ -133,7 +132,7 @@ function bookrtf_convert($content, $base_url) {
    
   $header = "\\rtf1\r\n";
   $header .= "\\vertdoc\\paperh16834\\paperw11909 ";
-  $header .= "\\fet0 \\ftnrstpg \\facingp\r\n";
+  $header .= "\\fet0  \\facingp \\ftnbj \\ftnrstpg\r\n";
   
   // preparing to make this a form element
   $front_page = "<html><body><h3>Gele Boekje</h3><br><br><br><img src=\"/sites/gele-boekje.daventria.com/files/logo.png\" /></body></html>";
@@ -381,9 +380,6 @@ function bookrtf_convert($content, $base_url) {
   // non breaking space
   $content = preg_replace("|\x{C2}\x{A0}|", " ", $content);
 
-
-
-
   return $content;
 }
 
@@ -429,8 +425,7 @@ function bookrtf_traverse ($elements, $base_url) {
         else if ($e->name) {
           $anchor = urlencode($e->name);
           $e->outertext = "{\\*\\bkmkstart ".$anchor."}{\\*\\bkmkend ".$anchor."}";
-        }
-       
+        }       
         break;
       case 'br':
         $e->outertext = "\\tab\\line\r\n";
@@ -439,7 +434,7 @@ function bookrtf_traverse ($elements, $base_url) {
         // start of a new chapter --> new page, right header contains chapter title, bookmark for the table of contents
         $title = $e->innertext;
                 
-        $rtf = "\\par \\pard \\sect\r\n";
+        $rtf = "\\par \\pard \\sect\\sftnrstpg\r\n";
         $rtf.= "{\\headerl \\par \\ql \b1Gele boekje\b0 \\par}\r\n";
         $rtf .= "{\\headerr \\par \\qr " . $title . "}\r\n";
         $rtf .= "{\\footerr \\par \\qr {\\field{\*\\fldinst  PAGE }{\\fldrslt 2}} \\par}\r\n";
@@ -600,8 +595,7 @@ function bookrtf_traverse ($elements, $base_url) {
         $num_rows = 0;
         $num_cols = 0;
         $table;
-        $colwidth = array();
-        
+        $colwidth = array();        
 
         // retrieve table contents and some required specifications
         $rows = $e->children();
@@ -698,7 +692,7 @@ function bookrtf_traverse ($elements, $base_url) {
         $e->outertext = "";
         break;
       case 'u':
-        $e->outertext = "{\\u " . $e->innertext . "}";
+        $e->outertext = "{\\ul " . $e->innertext . "}";
     }    
   }
 }
