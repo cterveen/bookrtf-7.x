@@ -125,7 +125,7 @@ function bookrtf_convert($content, $base_url) {
   $content = "<html><body>" . $content . "</body></html>";
   
   // CLEAN UP spaces after newlines.
-  $content = preg_replace("|([\r\n]+)\s+|", "$1", $content);
+  $content = preg_replace("|\s+([\r\n]+)\s+|", "$1", $content);
   
   
   // Setup the parser
@@ -139,9 +139,11 @@ function bookrtf_convert($content, $base_url) {
    * - Start of first page
    */   
    
-  $header = "\\rtf1\r\n";
-  $header .= "\\vertdoc\\paperh16834\\paperw11909 ";
-  $header .= "\\fet0  \\facingp \\ftnbj \\ftnrstpg\r\n";
+  $header = "\\rtf1\\ansi\r\n";
+  $header .= "\\deff0 {\\fonttbl {\\f0 Calibri;}}\r\n";
+  $header .= "\\vertdoc\\paperh16834\\paperw11909\r\n";
+  $header .= "\\fet0\\facingp\\ftnbj\\ftnrstpg\r\n";
+  $header .= "\\plain\r\n";
   
   // preparing to make this a form element
   $front_page = "<html><body><h3>Gele Boekje</h3><br><br><br><img src=\"/sites/gele-boekje.daventria.com/files/logo.png\" /></body></html>";
@@ -159,8 +161,10 @@ function bookrtf_convert($content, $base_url) {
   
   
   $date = new DateTime();
-  $header .= "\\par\\sect\r\n";
-  $header .= "\\qc \\b1 " . $book_title . "\\b0 \\line\r\n";
+  $header .= "\\par\r\n";
+  $header .= "\\sect\r\n";
+  $header .= "\r\n{\\pard\\qc";
+  $header .= "{\\b " . $book_title . "}\\line\r\n";
   $header .= "R&ZV Daventria\\line\r\n\\line\r\n";
   if (isset($base_url)) {
     $header .= $base_url;
@@ -169,10 +173,10 @@ function bookrtf_convert($content, $base_url) {
     $header .= "http://gele-boekje.daventria.com/";
   }
   $header .= "\\line\r\n\\line\r\n";
-  $header .= "Gegenereerd: " . date_format($date, "d-m-Y") . " \\par";
+  $header .= "Gegenereerd: " . date_format($date, "d-m-Y") . " \\par}";
   $header .= "\\page\r\n";
-  $header .= "\\par \\pard \\sa200 \\fs32 {\\b Inhoud}\\fs24\r\n";
-  $header .= "\\par\\pard {";
+  $header .= "{\\pard \\sa200 \\fs32 {\\b Inhoud}\\fs24\r\n";
+  $header .= "\\par}\r\n{\\pard {";
     
   foreach ($toc as $e) {
     // Assume title starts with the chapternumber
@@ -190,18 +194,21 @@ function bookrtf_convert($content, $base_url) {
   $header .= "\\cellx7000 \\cellx8309\r\n"; 
   $header .= "\\intbl\\pard Index\\cell";
   $header .= "\\qr{\\field{\*\\fldinst PAGEREF chapterIndex}}\\cell\\row\r\n";
-  $header .= "}";
+  $header .= "}\\par}\r\n";
   
   /**
    *Footer
    * - index
    */
   
-  $footer = "\\par \\sect\r\n";
-  $footer .= "{\\headerr \\par \\qr Index}\r\n";
-  $footer .= "\\fs32\\b1 ";
+  $footer = "\r\n\\page\r\n\\sect\r\n";
+  $footer .= "{\\headerl\\pard\\ql {\b Gele boekje}\\par}\r\n";
+  $footer .= "{\\headerr\\pard\\qr Index\\par}\r\n";
+  $footer .= "{\\footerr\\pard\\qr \\chpgn \\par}\r\n";
+  $footer .= "{\\footerl\\pard\\ql \\chpgn \\par}\r\n";
+  $footer .= "{\\pard{\\b\\fs32 ";
   $footer .= "{\\*\\bkmkstart chapterIndex}{\\*\\bkmkend chapterIndex}Index";
-  $footer .= "\\b0\\fs24\r\n";
+  $footer .= "}\\par}\r\n";
   $footer .= "\\sect \\sbknone \\cols2\r\n";  
   
   $anchors = $html->find('a[name]');
@@ -223,13 +230,15 @@ function bookrtf_convert($content, $base_url) {
     }
     if ($initial != $cur_initial) {
       if ($cur_initial != "") {
-        $footer .= "\\par";
+        $footer .= "\\par}\r\n";
       }
-      $footer .= "\\fs28{\\b " . $initial . "\\b}\\fs24\\pard\r\n\\par ";
+      $footer .= "{\\pard\\fs28{\\b " . $initial . "\\b}\\par}\r\n";
+      $footer .= "{\\pard\\ql ";
       $cur_initial = $initial;
     }
     $footer .= $t . " {\\field{\*\\fldinst PAGEREF index".urlencode($t)."}}\\line\r\n";
   }
+  $footer .= "\\par}\r\n";
   
   /** 
   * Start changing the content from HTML into RTF
@@ -246,6 +255,10 @@ function bookrtf_convert($content, $base_url) {
   
   // FINAL DOCUMENT
   $content = "{" . $header . "\r\n" . $content . "\r\n" . $footer . "}";
+  
+  // the HTML parser adds some spaces which doesn't matter in HTML but does in RTF
+  $content = preg_replace("|\s+([\r\n]+)\s+|", "$1", $content);
+  $content = preg_replace("|\\intbl{\s+{|", "intbl{{", $content);
   
   // SPECIAL CHARACTERS
   // extended ascii
@@ -443,25 +456,25 @@ function bookrtf_traverse ($elements, $base_url) {
         // start of a new chapter --> new page, right header contains chapter title, bookmark for the table of contents
         $title = $e->innertext;
                 
-        $rtf = "\\par \\pard \\sect\\sftnrstpg\r\n";
-        $rtf.= "{\\headerl \\par \\ql \b1Gele boekje\b0 \\par}\r\n";
-        $rtf .= "{\\headerr \\par \\qr " . $title . "}\r\n";
-        $rtf .= "{\\footerr \\par \\qr {\\field{\*\\fldinst  PAGE }{\\fldrslt 2}} \\par}\r\n";
-        $rtf .= "{\\footerl \\par \\ql {\\field{\*\\fldinst  PAGE }{\\fldrslt 2}} \\par}\r\n";
+        $rtf = "\\sect\\sftnrstpg\r\n";
+        $rtf .= "{\\headerl\\pard\\ql {\b Gele boekje}\\par}\r\n";
+        $rtf .= "{\\headerr\\pard\\qr " . $title . "}\r\n";
+        $rtf .= "{\\footerr\\pard\\qr \\chpgn \\par}\r\n";
+        $rtf .= "{\\footerl\\pard\\ql \\chpgn \\par}\r\n";
         // if the chapter starts with a number it should be in the index, add a bookmark for it
         if (preg_match("|^(\d+)\.\s|", $title, $match)) {
           $chapter = $match[1];
-          $rtf .= "{\\*\\bkmkstart chapter".$chapter."}{\\*\\bkmkend chapter".$chapter."}";
+          $rtf .= "{\\*\\bkmkstart chapter".$chapter."}{\\*\\bkmkend chapter".$chapter."}\r\n";
         }
-        $rtf .= "\\fs32{\\b " . $title . "}\\fs24\r\n";
+        $rtf .= "{\\pard{\\b\\fs32 " . $title . "}\\par}\r\n";
         
         $e->outertext = $rtf;
         break;
       case 'h2':
-        $e->outertext = "\\par\\pard\\sa0\\fs28\\b1 " . $e->innertext . "\\b0\\fs24\\pard\r\n";
+        $e->outertext = "{\\pard\\sa0{\\b\\fs28 " . $e->innertext . "}\\par}\r\n";
         break;
       case 'h3': 
-        $e->outertext = "\\par\\pard\\sa0\\fs32 \\qc {\\b " . $e->innertext . "}\\fs24\ \pard\r\n";     
+        $e->outertext = "{\\pard\\sa0\\qc{\\b\\fs32 " . $e->innertext . "}\\par}\r\n";     
         break;
       case 'i': 
         $e->outertext = "{\\i " . $e->innertext . "}";
@@ -488,7 +501,7 @@ function bookrtf_traverse ($elements, $base_url) {
         $scalex = 100;
         $scaley = 100;
 
-        $rtf = "\\par{\\pict\\picw".$width."\\pich".$height."\\picwgoal".$picwidth."\\pichgoal".$picheight."\\picscalex".$scalex."\\picscaley".$scaley;
+        $rtf = "{\\pard{\\pict\\picw".$width."\\pich".$height."\\picwgoal".$picwidth."\\pichgoal".$picheight."\\picscalex".$scalex."\\picscaley".$scaley;
     
         // set image type (jpg or png supported)
         if (substr($url, -4) == ".png") {
@@ -502,7 +515,7 @@ function bookrtf_traverse ($elements, $base_url) {
         $hex = wordwrap($hex, 80, "\r\n", TRUE);
         
         $rtf .= $hex;
-        $rtf .= "\r\n}\r\n";
+        $rtf .= "\r\n}\\par}\r\n";
         
         $e->outertext = $rtf;
         break;
@@ -547,23 +560,13 @@ function bookrtf_traverse ($elements, $base_url) {
           $s = $s->next_sibling();
         }
         
-        // Not the last item if there's another nested list!
-        // TODO: this goes wrong in something like <li>text<ol><li>...</ol>some
-        // more text but why do you want to make a list like that?
-        $c = $e->children(0);
-        if ($c) {
-          if ($c->tag == 'ol' | $c->tag == 'ul') {
-            $last = 0;
-          }
-        }
-        
         $rtf = "";
-        if ($last == 1 & $level == 1) {
-          $rtf .= "\\par\\sa200";
+        // if the first item of a nested list close the current paragraph.
+        // TODO: might want to check if the list is inside a paragraph and do that anyway
+        if ($level > 1 & $number == 1) {
+          $rtf .= "\\par}\r\n";
         }
-        else {
-          $rtf .= "\\par\\pard";
-        }
+        $rtf .= "{\\pard";
         
         $firstindent = -360;
         $lineindent = 720 * $level;
@@ -576,12 +579,23 @@ function bookrtf_traverse ($elements, $base_url) {
           $rtf .= " " . $array['id'] . ".\\tab ";
         }
         $rtf .= $e->innertext;
-        $rtf .= "\r\n";
         
+         // finish the paragraph unless it's the last item in a nested list
+        // TODO this will give trouble if there's tekst after the nested list. This text will be included in the last item of the nested list at the moment.        
+        if ($last != 1 | $level == 1) {
+          $rtf .= "\\par}\r\n";
+        }
+        
+        // if it's the last item of the list add some white space
+        // TODO this creates an empty line, would be nicer if I could make that 200 twips height.
+        if ($last == 1 & $level == 1) {
+          $rtf .= "{\\pard\\sa0\\par}\r\n";
+        }
+
         $e->outertext = $rtf;
         break;
       case 'p':
-        $e->outertext = "\\par \\pard \\sa200 \\qj " . $e->innertext;
+        $e->outertext = "{\\pard\\sa200\\qj " . $e->innertext . "\\par}\r\n";
         break;
       case 'strong': 
         $e->outertext = "{\\b " . $e->innertext . "}";
@@ -681,7 +695,7 @@ function bookrtf_traverse ($elements, $base_url) {
         }
         
         // now we have the info start building it up again
-        $rtf = "\par{";
+        $rtf = "{";
         foreach ($table as $row) {
           $rtf .= "\\trowd";
           foreach ($row as $cell) {
@@ -691,10 +705,10 @@ function bookrtf_traverse ($elements, $base_url) {
           foreach ($row as $cell) {
             $rtf .= "\\intbl{" . $cell['innertext'] . "}\\cell\r\n";
           }
-          $rtf .= "\\row";
+          $rtf .= "\\row\r\n";
         }
-        $rtf .= "}\r\n";
-  
+        $rtf .= "}\r\n{\\pard\\par}\r\n";
+          
         $e->outertext = $rtf;
         break;
       case 'title':
