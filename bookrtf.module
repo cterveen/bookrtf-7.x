@@ -66,9 +66,9 @@ function _bookrtf_page($nid) {
       $tree = book_menu_subtree_data($node->book);        
       $content = bookrtf_index_traverse($tree);
       
-      $file = "sites/gele-boekje.daventria.com/files/gele-boekje.rtf";
-      $url_rtf = "http://www.daventria.com/sites/gele-boekje.daventria.com/files/gele-boekje.rtf";
-      $url_pdf = "http://www.daventria.com/sites/gele-boekje.daventria.com/files/gele-boekje.pdf";
+      $file = file_destination("public://gele-boekje.rtf", FILE_EXISTS_REPLACE);
+      $url_rtf = file_create_url("public://gele-boekje.rtf");
+      $url_pdf = file_create_url("public://gele-boekje.pdf");
       
       $content = bookrtf_convert($content, $base_url);
       
@@ -146,7 +146,7 @@ function bookrtf_convert($content, $base_url) {
   $header .= "\\plain\r\n";
   
   // preparing to make this a form element
-  $front_page = "<html><body><h3>Gele Boekje</h3><br><br><br><img src=\"/sites/gele-boekje.daventria.com/files/logo.png\" /></body></html>";
+  $front_page = "<html><body><h3>Gele Boekje</h3><br><br><br><img src=\"" . file_create_url("public://logo.png") . "\" /></body></html>";
   $title_html = str_get_html($front_page);
   $elements = $title_html->find('html');
   bookrtf_traverse($elements, $base_url);
@@ -158,8 +158,7 @@ function bookrtf_convert($content, $base_url) {
   $book_title_element = array_shift($toc);
   $book_title = $book_title_element->innertext;
   $book_title_element->outertext = "";
-  
-  
+    
   $date = new DateTime();
   $header .= "\\par\r\n";
   $header .= "\\sect\r\n";
@@ -223,20 +222,31 @@ function bookrtf_convert($content, $base_url) {
   sort($terms);
   
   $cur_initial = "";
+  
+  global $index_id;
+  $index_id = array();
+  $i = 0;
+  
   foreach ($terms as $t) {
-    $initial = substr($t, 0, 1);
-    if (is_numeric($initial)) {
-      $initial = "#";
-    }
-    if ($initial != $cur_initial) {
-      if ($cur_initial != "") {
-        $footer .= "\\par}\r\n";
+    if (!isset($index_id[$t])) {
+      $index_id[$t] = $i;
+      $anchor = "index-" . $i ; 
+      $i++;
+  
+      $initial = substr($t, 0, 1);
+      if (is_numeric($initial)) {
+        $initial = "#";
       }
-      $footer .= "{\\pard\\fs28{\\b " . $initial . "\\b}\\par}\r\n";
-      $footer .= "{\\pard\\ql ";
-      $cur_initial = $initial;
+      if ($initial != $cur_initial) {
+        if ($cur_initial != "") {
+          $footer .= "\\par}\r\n";
+        }
+        $footer .= "{\\pard\\fs28{\\b " . $initial . "\\b}\\par}\r\n";
+        $footer .= "{\\pard\\ql ";
+        $cur_initial = $initial;
+      }
+      $footer .= $t . " {\\field{\*\\fldinst PAGEREF ".$anchor."}}\\line\r\n";
     }
-    $footer .= $t . " {\\field{\*\\fldinst PAGEREF index".urlencode($t)."}}\\line\r\n";
   }
   $footer .= "\\par}\r\n";
   
@@ -445,9 +455,13 @@ function bookrtf_traverse ($elements, $base_url) {
           }          
         }
         else if ($e->name) {
-          $anchor = urlencode($e->name);
-          $e->outertext = "{\\*\\bkmkstart ".$anchor."}{\\*\\bkmkend ".$anchor."}";
-        }       
+         if (preg_match("|^index|", $e->name)) {
+           $label = substr($e->name, 5);
+           global $index_id;
+           $anchor = "index-" . $index_id[$label]; 
+           $e->outertext = "{\\*\\bkmkstart ".$anchor."}{\\*\\bkmkend ".$anchor."}";
+          }
+        }
         break;
       case 'br':
         $e->outertext = "\\tab\\line\r\n";
@@ -457,7 +471,7 @@ function bookrtf_traverse ($elements, $base_url) {
         $title = $e->innertext;
                 
         $rtf = "\\sect\\sftnrstpg\r\n";
-        $rtf .= "{\\headerl\\pard\\ql {\b Gele boekje}\\par}\r\n";
+        $rtf .= "{\\headerl\\pard\\ql {\\b Gele boekje}\\par}\r\n";
         $rtf .= "{\\headerr\\pard\\qr " . $title . "}\r\n";
         $rtf .= "{\\footerr\\pard\\qr \\chpgn \\par}\r\n";
         $rtf .= "{\\footerl\\pard\\ql \\chpgn \\par}\r\n";
@@ -483,7 +497,7 @@ function bookrtf_traverse ($elements, $base_url) {
         $url = $e->src;
         
         // assume relative url
-        if (isset($base_url)) {
+        if (isset($base_url) & substr($url, 0, 4) != "http") {
           $url = $base_url . $url;
         }
         
