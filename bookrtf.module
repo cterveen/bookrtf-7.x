@@ -49,8 +49,91 @@ function bookrtf_menu() {
      'access arguments' => array('access content'),
      'type' => MENU_CALLBACK,
    );
+   
+   $items['admin/config/bookrtf'] = array(
+    'title' => 'BookRTF',
+    'description' => 'Configuration for BookRTF module',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('bookrtf_form'),
+    'access arguments' => array('access administration pages'),
+    'type' => MENU_NORMAL_ITEM);
+   
+   
    return $items;
 }
+
+
+/** 
+ * Implements hook_form
+ */
+
+function bookrtf_form($form, &$form_state) {
+
+  /**
+  * Options for the module (need a lot of that)
+  *
+  * - Custom title
+  * - Custom filename
+  * - Custom front_page
+  * - Show table of contents
+  * - Show index
+  * - Download page text.
+  */
+  
+  $form['bookrtf_title'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Book title'),
+    '#default_value' => variable_get('bookrtf_title', variable_get('site_name', "Default site name")),
+    '#size' => 20,
+    '#maxlength' => 20,
+    '#description' => t('The title to use for the book'),
+    '#required' => TRUE,
+  );
+  
+  $form['bookrtf_filename'] = array(
+    '#type' => 'textfield',
+    '#title' => t('File name'),
+    '#default_value' => variable_get('bookrtf_filename', "download.rtf"),
+    '#size' => 20,
+    '#maxlength' => 20,
+    '#description' => t('The filename for the download'),
+    '#required' => FALSE,
+  );
+  
+  $form['bookrtf_flyleaf'] = array (
+    '#type' => 'checkbox',
+    '#title' => 'Include flyleaf',
+    '#default_value' => variable_get('bookrtf_flyleaf', 1));
+  
+  $form['bookrtf_toc'] = array (
+    '#type' => 'checkbox',
+    '#title' => 'Include table of contents',
+    '#default_value' => variable_get('bookrtf_toc', 1));
+    
+  $form['bookrtf_index'] = array(
+    '#type' => 'checkbox',
+    '#title' => 'Include index',
+    '#default_value' => variable_get('bookrtf_index', 0));
+
+  return system_settings_form($form);
+}
+
+/**
+ * Implements validation from the Form API.
+ * 
+ * @param $form
+ *   A structured array containing the elements and properties of the form.
+ * @param $form_state
+ *   An array that stores information about the form's current state 
+ *   during processing.
+ */
+function bookrtf_form_validate($form, &$form_state){
+  $filename = $form_state['values']['bookrtf_filename'];
+  if (strlen($filename) <= 4 | substr($filename, -4) != ".rtf") {
+    form_set_error('bookrtf_filename', t('You must enter a valid filename that ends with .rtf'));
+  }
+}
+
 
  /**
  * Get the contents from print and, convert to RTF, save as file and show a download page.
@@ -66,8 +149,8 @@ function _bookrtf_page($nid) {
       $tree = book_menu_subtree_data($node->book);        
       $content = bookrtf_index_traverse($tree);
       
-      $file = file_destination("public://gele-boekje.rtf", FILE_EXISTS_REPLACE);
-      $url_rtf = file_create_url("public://gele-boekje.rtf");
+      $file = file_destination("public://" . variable_get('bookrtf_filename', "download.rtf"), FILE_EXISTS_REPLACE);
+      $url_rtf = file_create_url("public://" . variable_get('bookrtf_filename', "download.rtf"));
       $url_pdf = file_create_url("public://gele-boekje.pdf");
       
       $content = bookrtf_convert($content, $base_url);
@@ -130,6 +213,8 @@ function bookrtf_convert($content, $base_url) {
   
   // Setup the parser
   $html = str_get_html($content);
+  
+  $book_title = variable_get('bookrtf_title', variable_get('site_name', "Default site name"));
     
   /**
    * HEADER
@@ -146,7 +231,9 @@ function bookrtf_convert($content, $base_url) {
   $header .= "\\plain\r\n";
   
   // preparing to make this a form element
-  $front_page = "<html><body><h3>Gele Boekje</h3><br><br><br><img src=\"" . file_create_url("public://logo.png") . "\" /></body></html>";
+  $front_page = "<html><body><h3>";
+  $front_page .= $book_title;
+  $front_page .= "</h3><br><br><br><img src=\"" . file_create_url("public://logo.png") . "\" /></body></html>";
   $title_html = str_get_html($front_page);
   $elements = $title_html->find('html');
   bookrtf_traverse($elements, $base_url);
@@ -154,101 +241,108 @@ function bookrtf_convert($content, $base_url) {
   $header .= $title_html;
 
   // flyleaf
-  $toc = $html->find("h1");
-  $book_title_element = array_shift($toc);
-  $book_title = $book_title_element->innertext;
-  $book_title_element->outertext = "";
-    
-  $date = new DateTime();
-  $header .= "\\par\r\n";
   $header .= "\\sect\r\n";
-  $header .= "\r\n{\\pard\\qc";
-  $header .= "{\\b " . $book_title . "}\\line\r\n";
-  $header .= "R&ZV Daventria\\line\r\n\\line\r\n";
-  if (isset($base_url)) {
-    $header .= $base_url;
-  }
-  else {
-    $header .= "http://gele-boekje.daventria.com/";
-  }
-  $header .= "\\line\r\n\\line\r\n";
-  $header .= "Gegenereerd: " . date_format($date, "d-m-Y") . " \\par}";
-  $header .= "\\page\r\n";
-  $header .= "{\\pard \\sa200 \\fs32 {\\b Inhoud}\\fs24\r\n";
-  $header .= "\\par}\r\n{\\pard {";
-    
-  foreach ($toc as $e) {
-    // Assume title starts with the chapternumber
-    $title = $e->innertext;
-    preg_match("|^(\d+)\.\s|", $title, $match);
-    $chapter = $match[1];
-    
-    $header .= "\\trowd";
-    $header .= "\\cellx7000 \\cellx8309\r\n"; 
-    $header .= "\\intbl\\pard " .$title . "\\cell";
-    $header .= "\\qr{\\field{\*\\fldinst PAGEREF chapter".$chapter."}}\\cell\\row\r\n";
-  }
   
-  $header .= "\\trowd";
-  $header .= "\\cellx7000 \\cellx8309\r\n"; 
-  $header .= "\\intbl\\pard Index\\cell";
-  $header .= "\\qr{\\field{\*\\fldinst PAGEREF chapterIndex}}\\cell\\row\r\n";
-  $header .= "}\\par}\r\n";
+  if (variable_get('bookrtf_flyleaf', 1)) {
+    $header .= "{\\pard\\qc";
+    $header .= "{\\b " . $book_title . "}\\line\r\n";
+    if (isset($base_url)) {
+      $header .= $base_url;
+    }
+    $header .= "\\line\r\n\\line\r\n";
+    $date = new DateTime();
+    $header .= "Gegenereerd: " . date_format($date, "d-m-Y") . " \\par}";
+  }
+  $header .= "\\page\r\n";
+  
+  // table of contents
+  if (variable_get('bookrtf_toc', 1)) {
+    $header .= "{\\pard \\sa200 \\fs32 {\\b Inhoud}\\fs24\r\n";
+    $header .= "\\par}\r\n{\\pard {";
+        
+    $toc = $html->find("h1");
+    // remove the first title as this should be the title of the book and does not belong in the toc.
+    $book_title_element = array_shift($toc);
+    $book_title_element->outertext = "";
+    foreach ($toc as $e) {
+      // Assume title starts with the chapternumber
+      $title = $e->innertext;
+      preg_match("|^(\d+)\.\s|", $title, $match);
+      $chapter = $match[1];
+    
+      $header .= "\\trowd";
+      $header .= "\\cellx7000 \\cellx8309\r\n"; 
+      $header .= "\\intbl\\pard " .$title . "\\cell";
+      $header .= "\\qr{\\field{\*\\fldinst PAGEREF chapter".$chapter."}}\\cell\\row\r\n";
+    }
+  
+    if (variable_get('bookrtf_index', 0)) {
+      $header .= "\\trowd";
+      $header .= "\\cellx7000 \\cellx8309\r\n"; 
+      $header .= "\\intbl\\pard Index\\cell";
+      $header .= "\\qr{\\field{\*\\fldinst PAGEREF chapterIndex}}\\cell\\row\r\n";
+    }
+    $header .= "}\\par}\r\n";
+  }
   
   /**
    *Footer
    * - index
    */
+   
+   $footer = "";
   
-  $footer = "\r\n\\page\r\n\\sect\r\n";
-  $footer .= "{\\headerl\\pard\\ql {\b Gele boekje}\\par}\r\n";
-  $footer .= "{\\headerr\\pard\\qr Index\\par}\r\n";
-  $footer .= "{\\footerr\\pard\\qr \\chpgn \\par}\r\n";
-  $footer .= "{\\footerl\\pard\\ql \\chpgn \\par}\r\n";
-  $footer .= "{\\pard{\\b\\fs32 ";
-  $footer .= "{\\*\\bkmkstart chapterIndex}{\\*\\bkmkend chapterIndex}Index";
-  $footer .= "}\\par}\r\n";
-  $footer .= "\\sect \\sbknone \\cols2\r\n";  
+  if (variable_get('bookrtf_index', 0)) {
+    $footer .= "\r\n\\page\r\n\\sect\r\n";
+    $footer .= "{\\headerl\\pard\\ql {\b ".$book_title."}\\par}\r\n";
+    $footer .= "{\\headerr\\pard\\qr Index\\par}\r\n";
+    $footer .= "{\\footerr\\pard\\qr \\chpgn \\par}\r\n";
+    $footer .= "{\\footerl\\pard\\ql \\chpgn \\par}\r\n";
+    $footer .= "{\\pard{\\b\\fs32 ";
+    $footer .= "{\\*\\bkmkstart chapterIndex}{\\*\\bkmkend chapterIndex}Index";
+    $footer .= "}\\par}\r\n";
+    $footer .= "\\sect \\sbknone \\cols2\r\n";  
   
-  $anchors = $html->find('a[name]');
-  $terms = array();
-  foreach ($anchors as $a) {
-    $label = $a->name;
-    if (preg_match("|^index|", $label)) {
-      $label = substr($label, 5);
-      array_push($terms, $label);
-    }
-  }
-  sort($terms);
-  
-  $cur_initial = "";
-  
-  global $index_id;
-  $index_id = array();
-  $i = 0;
-  
-  foreach ($terms as $t) {
-    if (!isset($index_id[$t])) {
-      $index_id[$t] = $i;
-      $anchor = "index-" . $i ; 
-      $i++;
-  
-      $initial = substr($t, 0, 1);
-      if (is_numeric($initial)) {
-        $initial = "#";
+    $anchors = $html->find('a[name]');
+    $terms = array();
+    foreach ($anchors as $a) {
+      $label = $a->name;
+      if (preg_match("|^index|", $label)) {
+        $label = substr($label, 5);
+        array_push($terms, $label);
       }
-      if ($initial != $cur_initial) {
-        if ($cur_initial != "") {
-          $footer .= "\\par}\r\n";
+    }
+    sort($terms);
+  
+    $cur_initial = "";
+  
+    global $index_id;
+    $index_id = array();
+    $i = 0;
+  
+    foreach ($terms as $t) {
+      if (!isset($index_id[$t])) {
+        $index_id[$t] = $i;
+        $anchor = "index-" . $i ; 
+        $i++;
+  
+        $initial = substr($t, 0, 1);
+        if (is_numeric($initial)) {
+          $initial = "#";
         }
-        $footer .= "{\\pard\\fs28{\\b " . $initial . "\\b}\\par}\r\n";
-        $footer .= "{\\pard\\ql ";
-        $cur_initial = $initial;
+        if ($initial != $cur_initial) {
+          if ($cur_initial != "") {
+            $footer .= "\\par}\r\n";
+          }
+          $footer .= "{\\pard\\fs28{\\b " . $initial . "\\b}\\par}\r\n";
+          $footer .= "{\\pard\\ql ";
+          $cur_initial = $initial;
+        }
+        $footer .= $t . " {\\field{\*\\fldinst PAGEREF ".$anchor."}}\\line\r\n";
       }
-      $footer .= $t . " {\\field{\*\\fldinst PAGEREF ".$anchor."}}\\line\r\n";
     }
+    $footer .= "\\par}\r\n";
   }
-  $footer .= "\\par}\r\n";
   
   /** 
   * Start changing the content from HTML into RTF
@@ -471,7 +565,7 @@ function bookrtf_traverse ($elements, $base_url) {
         $title = $e->innertext;
                 
         $rtf = "\\sect\\sftnrstpg\r\n";
-        $rtf .= "{\\headerl\\pard\\ql {\\b Gele boekje}\\par}\r\n";
+        $rtf .= "{\\headerl\\pard\\ql {\\b " . variable_get('bookrtf_title', variable_get('site_name', "Default site name")) . "}\\par}\r\n";
         $rtf .= "{\\headerr\\pard\\qr " . $title . "}\r\n";
         $rtf .= "{\\footerr\\pard\\qr \\chpgn \\par}\r\n";
         $rtf .= "{\\footerl\\pard\\ql \\chpgn \\par}\r\n";
