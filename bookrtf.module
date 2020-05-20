@@ -12,10 +12,9 @@
  * the same function name.
  *
  * get it here: https://simplehtmldom.sourceforge.io/
- */
-if (!function_exists("str_get_html")) {
-  include("simple_html_dom.php");
-}
+ * save it to: sites/all/libraries/simle_html_dom/
+ */ 
+include_once("sites/all/libraries/simple_html_dom/simple_html_dom.php");
  
  /**
  * Implements hook_help().
@@ -114,6 +113,34 @@ function bookrtf_form($form, &$form_state) {
     '#type' => 'checkbox',
     '#title' => 'Include index',
     '#default_value' => variable_get('bookrtf_index', 0));
+    
+  $bookrtf_front_page = variable_get('bookrtf_front_page', array('value' => '<h3>'.variable_get('bookrtf_title', variable_get('site_name', "Default site name")).'</h3>', 'format' => 'full_html'));
+  
+  $form['bookrtf_front_page'] = array(
+    '#type' => 'text_format',
+    '#format' => $bookrtf_front_page['format'],
+    '#title' => 'Custom frontpage',
+    '#default_value' => $bookrtf_front_page['value'],
+    '#description' => t('A custom frontpage for your book'));
+    
+  $form['bookrtf_download_title'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Title of download page'),
+    '#default_value' => variable_get('bookrtf_download_title', "Download"),
+    '#size' => 20,
+    '#maxlength' => 20,
+    '#description' => t('The title to use for the download page'),
+    '#required' => TRUE,
+  );    
+    
+  $bookrtf_download_page = variable_get('bookrtf_download_page', array('value' => '<p><a href = "' . file_create_url('public://' . variable_get('bookrtf_filename', "download.rtf")) . '">Download ' . variable_get('bookrtf_filename', "download.rtf") . '</p>', 'format' => 'full_html'));
+  $form['bookrtf_download_page'] = array(
+    '#type' => 'text_format',
+    '#format' => $bookrtf_download_page['format'],
+    '#title' => t('Contents of download page'),
+    '#default_value' => $bookrtf_download_page['value'],
+    '#description' => t('The text of the download page'),
+    '#required' => TRUE);
 
   return system_settings_form($form);
 }
@@ -157,11 +184,11 @@ function _bookrtf_page($nid) {
       
       file_put_contents($file, $content);
       
+      $bookrtf_download_page = variable_get('bookrtf_download_page', array('value' => '<p><a href = "' . file_create_url('public://' . variable_get('bookrtf_filename', "download.rtf")) . '">Download ' . variable_get('bookrtf_filename', "download.rtf") . '</p>', 'format' => 'full_html'));
+      
       $page_array['index'] = array(
-        '#title' => t('Download'),
-        '#markup' => t('<p>Hieronder kan het Gele Boekje worden gedownload voor offline gebruik of om uit te printen. De bestanden zijn automatisch gegenereerd vanuit de tekst zoals die op de website staat.</p><p>Het gele boekje is beschikbaar in twee versies:</p><ul><li><a href = "'. $url_pdf . '">Recente PDF</a><li><a href = "' . $url_rtf . '">Actuele RTF</a></ul><p><b>Over het RTF document</b><br>De RTF-output is experimenteel. Het bestand kan geopend worden met de meeste tekstverwerkers en lijkt goed te werken in Microsoft Word en Libreoffice Writer. Mochten er fouten optreden dan kunnen deze gemeld worden bij de internetcie.</p>
-        <p>Bij het genereren van het bestand wordt er niet gekeken naar de opmaak. Alinea\'s en tabellen kunnen echter vreemd worden afgebroken en afbeeldingen zijn niet altijd logisch geplaatst.</p>
-        <p>In Microsoft Word worden paginanummers niet standaard weergegeven. Ga naar "Afdrukken" of "Afdrukvoorbeeld" en de paginanummers verschijnen in de inhoudsopgave en de index. Mogelijk staat overal een 1, ga dan terug naar het document en nogmaals naar "Afdrukken" of "Afdrukvoorbeeld", dan zouden de nummers goed moeten staan.'),
+        '#title' => t(variable_get('bookrtf_download_title', "Download")),
+        '#markup' => t($bookrtf_download_page['value']),
       );
    
       return $page_array;
@@ -231,10 +258,9 @@ function bookrtf_convert($content, $base_url) {
   $header .= "\\plain\r\n";
   
   // preparing to make this a form element
-  $front_page = "<html><body><h3>";
-  $front_page .= $book_title;
-  $front_page .= "</h3><br><br><br><img src=\"" . file_create_url("public://logo.png") . "\" /></body></html>";
-  $title_html = str_get_html($front_page);
+  $bookrtf_front_page = variable_get('bookrtf_front_page', array('value' => '<h3>'.variable_get('bookrtf_title', variable_get('site_name', "Default site name")).'</h3>', 'format' => 'full_html'));
+  $bookrtf_front_page["value"] = "<html><body><h3>" . $bookrtf_front_page["value"] . "</body></html>";
+  $title_html = str_get_html($bookrtf_front_page["value"]);
   $elements = $title_html->find('html');
   bookrtf_traverse($elements, $base_url);
   $title_html = strip_tags($title_html);
