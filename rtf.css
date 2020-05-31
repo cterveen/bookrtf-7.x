@@ -32,23 +32,19 @@ td {
  text-align: left;
 }
 
-header-left {
+.header-left {
  text-align: left;
  font-weight: bold;
 }
 
-header-right {
- font-size: 10pt;
-  text-align: right;   
+.header-right {
+  text-align: right; 
 }
 
-footer-left {
- font-size: 10pt;
+.footer-left {
   text-align: left;
 }
-footer-right {
- font-size: 10pt;
- text-align: right;   
+.footer-right {
+ text-align: right;  
 }
-
 
