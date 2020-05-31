@@ -23,3 +23,32 @@ h3 {
  font-weight: bold;
  text-align: justify;
 }
+
+li {
+ text-align: left;
+}
+
+td {
+ text-align: left;
+}
+
+header-left {
+ text-align: left;
+ font-weight: bold;
+}
+
+header-right {
+ font-size: 10pt;
+  text-align: right;   
+}
+
+footer-left {
+ font-size: 10pt;
+  text-align: left;
+}
+footer-right {
+ font-size: 10pt;
+ text-align: right;   
+}
+
+
