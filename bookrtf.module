@@ -7,14 +7,19 @@
  
  /**
  * Load the PHP simple HTML DOM parser if not done yet
- * Somehow include_once does not work as I expect, check whether function
- * str_get_html exist. This might potentially break if someone else uses
- * the same function name.
  *
  * get it here: https://simplehtmldom.sourceforge.io/
  * save it to: sites/all/libraries/simle_html_dom/
  */ 
 include_once("sites/all/libraries/simple_html_dom/simple_html_dom.php");
+
+ /**
+ * Load a css-parser if not done yet
+ *
+ * get it here: https://github.com/Schepp/CSS-Parser
+ * save it to: sites/all/libraries/schepp-css-parser/
+ */ 
+include_once("sites/all/libraries/schepp-css-parser/parser.php");
  
  /**
  * Implements hook_help().
@@ -172,7 +177,6 @@ function _bookrtf_page($nid) {
     if (isset($node->book)) {
       
       global $base_url;
-      
       $tree = book_menu_subtree_data($node->book);        
       $content = bookrtf_index_traverse($tree);
       
@@ -237,6 +241,76 @@ function bookrtf_convert($content, $base_url) {
   // CLEAN UP spaces after newlines.
   $content = preg_replace("|\s+([\r\n]+)\s+|", "$1", $content);
   
+  $fonttbl = array();
+  // default style
+  global $rtf_style;
+  $rtf_style = array(
+    "body" => "\\sa200\\qc ",
+    "h1" => "\\sa200\\fs32\\b ",
+    "h2" => "\\sa0\\fs16\\b ",
+    "h3" => "\\sa0\\qc\\fs32\\b ");
+    
+  // get the stylesheet
+  // TODO look for it in the theme directory!
+  $css_file = "sites/all/modules/bookrtf/rtf.css";
+  if (is_file($css_file)) {
+    $css_parser = new CssParser();
+    $css_parser->load_files($css_file);
+    $css_parser->parse();
+    $css = $css_parser->parsed;
+  }
+    
+  // apply
+  $tags = array_keys($css["main"]);
+  // clear
+  foreach ($tags as $tag) {
+    $rtf_style[$tag] = "";
+  }
+  // build
+  foreach ($tags as $tag) {
+    if (array_key_exists("margin-bottom", $css["main"][$tag])) {
+      $rtf_style[$tag] .= "\\sa". bookrtf_converter($css["main"][$tag]["margin-bottom"], "twips", 0);
+    }
+    if (array_key_exists("text-align", $css["main"][$tag])) {
+      // default is left so skip that
+      switch(trim($css["main"][$tag]["text-align"])) {
+        case "center":
+          $rtf_style[$tag] .= "\\qc";
+          break;
+        case "justify":
+          $rtf_style[$tag] .= "\\gj";
+          break;
+        case "right":
+          $rtf_style[$tag] .= "\\qr";
+          break;
+      }
+    }
+    if (array_key_exists("font-family", $css["main"][$tag])) {
+      $r = array();
+      // In css a family of fonts is given, if the first is not available the second is tried etc.
+      // I'm not sure how rtf / word processors handle that. Just pick the first one and hope for the best.
+      // TODO: first font found is the default font; that's not a problem if body is the first tag and
+      //       font-family is defined there. It is otherwise.
+      preg_match("|^([^;]+);?|", $css["main"][$tag]["font-family"], $r);
+      $font = trim($r[1]);
+      $font = preg_replace("|\"|", "", $font);
+      if (!array_key_exists($font, $fonttbl)) {
+        $fonttbl[$font] = count($fonttbl);
+      }
+      $rtf_style[$tag] .= "\\f" . $fonttbl[$font];
+    }
+    if (array_key_exists("font-size", $css["main"][$tag])) {
+      $rtf_style[$tag] .= "\\fs". bookrtf_converter($css["main"][$tag]["font-size"], "half points", 24);
+    }
+    if (array_key_exists("font-weight", $css["main"][$tag])) {
+      switch(trim($css["main"][$tag]["font-weight"])) {
+        case "bold":
+          $rtf_style[$tag] .= "\\b";
+          break;
+      }
+    }
+    $rtf_style[$tag] .= " ";
+  }
   
   // Setup the parser
   $html = str_get_html($content);
@@ -252,7 +326,11 @@ function bookrtf_convert($content, $base_url) {
    */   
    
   $header = "\\rtf1\\ansi\r\n";
-  $header .= "\\deff0 {\\fonttbl {\\f0 Calibri;}}\r\n";
+  $header .= "\\deff0 {\\fonttbl ";
+  foreach (array_keys($fonttbl) as $font) {
+    $header .= "{\\f" . $fonttbl[$font] . " " . $font . ";}";
+  }
+  $header .= "}\r\n";
   $header .= "\\vertdoc\\paperh16834\\paperw11909\r\n";
   $header .= "\\fet0\\facingp\\ftnbj\\ftnrstpg\r\n";
   $header .= "\\plain\r\n";
@@ -283,7 +361,7 @@ function bookrtf_convert($content, $base_url) {
   
   // table of contents
   if (variable_get('bookrtf_toc', 1)) {
-    $header .= "{\\pard \\sa200 \\fs32 {\\b Inhoud}\\fs24\r\n";
+    $header .= "{\\pard" .  $rtf_style["h1"] . "Inhoud\r\n";
     $header .= "\\par}\r\n{\\pard {";
         
     $toc = $html->find("h1");
@@ -324,9 +402,9 @@ function bookrtf_convert($content, $base_url) {
     $footer .= "{\\headerr\\pard\\qr Index\\par}\r\n";
     $footer .= "{\\footerr\\pard\\qr \\chpgn \\par}\r\n";
     $footer .= "{\\footerl\\pard\\ql \\chpgn \\par}\r\n";
-    $footer .= "{\\pard{\\b\\fs32 ";
+    $footer .= "{\\pard " . $rtf_style["h1"];
     $footer .= "{\\*\\bkmkstart chapterIndex}{\\*\\bkmkend chapterIndex}Index";
-    $footer .= "}\\par}\r\n";
+    $footer .= "\\par}\r\n";
     $footer .= "\\sect \\sbknone \\cols2\r\n";  
   
     $anchors = $html->find('a[name]');
@@ -549,6 +627,8 @@ function bookrtf_convert($content, $base_url) {
  */
  
 function bookrtf_traverse ($elements, $base_url) {
+  global $rtf_style;
+
   foreach ($elements as $e) {
     if ($e->first_child()) {
       $children = $e->children();
@@ -600,15 +680,15 @@ function bookrtf_traverse ($elements, $base_url) {
           $chapter = $match[1];
           $rtf .= "{\\*\\bkmkstart chapter".$chapter."}{\\*\\bkmkend chapter".$chapter."}\r\n";
         }
-        $rtf .= "{\\pard{\\b\\fs32 " . $title . "}\\par}\r\n";
+        $rtf .= "{\\pard" . $rtf_style["h1"] . $title . "\\par}\r\n";
         
         $e->outertext = $rtf;
         break;
       case 'h2':
-        $e->outertext = "{\\pard\\sa0{\\b\\fs28 " . $e->innertext . "}\\par}\r\n";
+        $e->outertext = "{\\pard" . $rtf_style["h2"] . $e->innertext . "\\par}\r\n";
         break;
       case 'h3': 
-        $e->outertext = "{\\pard\\sa0\\qc{\\b\\fs32 " . $e->innertext . "}\\par}\r\n";     
+        $e->outertext = "{\\pard" . $rtf_style["h3"] . $e->innertext . "\\par}\r\n";     
         break;
       case 'i': 
         $e->outertext = "{\\i " . $e->innertext . "}";
@@ -729,7 +809,7 @@ function bookrtf_traverse ($elements, $base_url) {
         $e->outertext = $rtf;
         break;
       case 'p':
-        $e->outertext = "{\\pard\\sa200\\qj " . $e->innertext . "\\par}\r\n";
+        $e->outertext = "{\\pard" . $rtf_style["body"] . $e->innertext . "\\par}\r\n";
         break;
       case 'strong': 
         $e->outertext = "{\\b " . $e->innertext . "}";
@@ -852,4 +932,24 @@ function bookrtf_traverse ($elements, $base_url) {
         $e->outertext = "{\\ul " . $e->innertext . "}";
     }    
   }
+}
+
+function bookrtf_converter($css, $rtf_units, $default) {
+  $rtf_value = $default;
+  
+  preg_match("|(\d+)([a-zA-Z]+)|", $css, $r);
+  $css_value = $r[1];
+  $css_units = $r[2];
+  
+  // distance
+  if ($css_units == "px" & $rtf_units == "twips") {
+    $rtf_value = round($css_value / 96 * 1440);
+  }
+  
+  // font size
+  if ($css_units == "pt" & $rtf_units == "half points") {
+    $rtf_value = $css_value * 2;
+  }  
+  
+  return $rtf_value;
 }
