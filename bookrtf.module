@@ -251,10 +251,10 @@ function bookrtf_convert($content, $base_url) {
     "h3" => "\\sa0\\qc\\fs32\\b ",
     "li" => "\\ql ",
     "td" => "\\ql ",
-    "header-left" => "\\ql\\b ",
-    "header-right" => "\\qr ",
-    "footer-left" => "\\ql ",
-    "footer-right" => "\\qr ");
+    ".header-left" => "\\ql\\b ",
+    ".header-right" => "\\qr ",
+    ".footer-left" => "\\ql ",
+    ".footer-right" => "\\qr ");
     
   // get the stylesheet
   // TODO look for it in the theme directory!
@@ -300,7 +300,7 @@ function bookrtf_convert($content, $base_url) {
       // I'm not sure how rtf / word processors handle that. Just pick the first one and hope for the best.
       // TODO: first font found is the default font; that's not a problem if body is the first tag and
       //       font-family is defined there. It is otherwise.
-      preg_match("|^([^;]+);?|", $css["main"][$tag]["font-family"], $r);
+      preg_match("|^([^,]+),?|", $css["main"][$tag]["font-family"], $r);
       $font = trim($r[1]);
       $font = preg_replace("|\"|", "", $font);
       if (!array_key_exists($font, $fonttbl)) {
@@ -681,10 +681,10 @@ function bookrtf_traverse ($elements, $base_url) {
         $title = $e->innertext;
                 
         $rtf = "\\sect\\sftnrstpg\r\n";
-        $rtf .= "{\\headerl\\pard".$rtf_style["header-left"] . variable_get('bookrtf_title', variable_get('site_name', "Default site name")) . "\\par}\r\n";
-        $rtf .= "{\\headerr\\pard".$rtf_style["header-right"]. $title . "\\par}\r\n";
-        $rtf .= "{\\footerr\\pard".$rtf_style["footer-right"]."\\chpgn \\par}\r\n";
-        $rtf .= "{\\footerl\\pard".$rtf_style["footer-left"]."\\chpgn \\par}\r\n";
+        $rtf .= "{\\headerl\\pard".$rtf_style[".header-left"] . variable_get('bookrtf_title', variable_get('site_name', "Default site name")) . "\\par}\r\n";
+        $rtf .= "{\\headerr\\pard".$rtf_style[".header-right"]. $title . "\\par}\r\n";
+        $rtf .= "{\\footerr\\pard".$rtf_style[".footer-right"]."\\chpgn \\par}\r\n";
+        $rtf .= "{\\footerl\\pard".$rtf_style[".footer-left"]."\\chpgn \\par}\r\n";
         // if the chapter starts with a number it should be in the index, add a bookmark for it
         if (preg_match("|^(\d+)\.\s|", $title, $match)) {
           $chapter = $match[1];
