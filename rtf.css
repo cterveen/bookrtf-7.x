@@ -1,0 +1,25 @@
+body {
+  margin-bottom: 13px;
+  font-family: "Calibri";
+  font-size: 12pt;
+  text-align: justify;
+}
+
+h1 {
+ margin-bottom: 13px;
+ font-size: 16pt;
+ font-weight: bold;
+}
+
+h2 {
+ margin-bottom: 0px;
+ font-size: 14pt;
+ font-weight: bold;
+}
+
+h3 {
+ margin-bottom: 0px;
+ font-size: 16pt;
+ font-weight: bold;
+ text-align: justify;
+}
