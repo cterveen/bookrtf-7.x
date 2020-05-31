@@ -248,7 +248,13 @@ function bookrtf_convert($content, $base_url) {
     "body" => "\\sa200\\qc ",
     "h1" => "\\sa200\\fs32\\b ",
     "h2" => "\\sa0\\fs16\\b ",
-    "h3" => "\\sa0\\qc\\fs32\\b ");
+    "h3" => "\\sa0\\qc\\fs32\\b ",
+    "li" => "\\ql ",
+    "td" => "\\ql ",
+    "header-left" => "\\ql\\b ",
+    "header-right" => "\\qr ",
+    "footer-left" => "\\ql ",
+    "footer-right" => "\\qr ");
     
   // get the stylesheet
   // TODO look for it in the theme directory!
@@ -278,7 +284,10 @@ function bookrtf_convert($content, $base_url) {
           $rtf_style[$tag] .= "\\qc";
           break;
         case "justify":
-          $rtf_style[$tag] .= "\\gj";
+          $rtf_style[$tag] .= "\\qj";
+          break;
+        case "left":
+          $rtf_style[$tag] .= "\\ql";
           break;
         case "right":
           $rtf_style[$tag] .= "\\qr";
@@ -466,7 +475,8 @@ function bookrtf_convert($content, $base_url) {
   
   // the HTML parser adds some spaces which doesn't matter in HTML but does in RTF
   $content = preg_replace("|\s+([\r\n]+)\s+|", "$1", $content);
-  $content = preg_replace("|\\intbl{\s+{|", "intbl{{", $content);
+  // TODO: sometimes an extra space is added in table cells, find out why
+  $content = preg_replace_callback("|\\intbl{([^\s]+)\s+{|", function($m) { return "intbl{". $m[1] ."{";}, $content);
   
   // SPECIAL CHARACTERS
   // extended ascii
@@ -671,10 +681,10 @@ function bookrtf_traverse ($elements, $base_url) {
         $title = $e->innertext;
                 
         $rtf = "\\sect\\sftnrstpg\r\n";
-        $rtf .= "{\\headerl\\pard\\ql {\\b " . variable_get('bookrtf_title', variable_get('site_name', "Default site name")) . "}\\par}\r\n";
-        $rtf .= "{\\headerr\\pard\\qr " . $title . "}\r\n";
-        $rtf .= "{\\footerr\\pard\\qr \\chpgn \\par}\r\n";
-        $rtf .= "{\\footerl\\pard\\ql \\chpgn \\par}\r\n";
+        $rtf .= "{\\headerl\\pard".$rtf_style["header-left"] . variable_get('bookrtf_title', variable_get('site_name', "Default site name")) . "\\par}\r\n";
+        $rtf .= "{\\headerr\\pard".$rtf_style["header-right"]. $title . "\\par}\r\n";
+        $rtf .= "{\\footerr\\pard".$rtf_style["footer-right"]."\\chpgn \\par}\r\n";
+        $rtf .= "{\\footerl\\pard".$rtf_style["footer-left"]."\\chpgn \\par}\r\n";
         // if the chapter starts with a number it should be in the index, add a bookmark for it
         if (preg_match("|^(\d+)\.\s|", $title, $match)) {
           $chapter = $match[1];
@@ -780,7 +790,7 @@ function bookrtf_traverse ($elements, $base_url) {
         if ($level > 1 & $number == 1) {
           $rtf .= "\\par}\r\n";
         }
-        $rtf .= "{\\pard";
+        $rtf .= "{\\pard" . $rtf_style["li"];
         
         $firstindent = -360;
         $lineindent = 720 * $level;
@@ -917,7 +927,7 @@ function bookrtf_traverse ($elements, $base_url) {
             $rtf .= floor($width_in_twips * $colright[$cell['col']+$cell['colspan']-1]);
           }
           foreach ($row as $cell) {
-            $rtf .= "\\intbl{" . $cell['innertext'] . "}\\cell\r\n";
+            $rtf .= "\\intbl{" . $rtf_style["td"] . $cell['innertext'] . "}\\cell\r\n";
           }
           $rtf .= "\\row\r\n";
         }
