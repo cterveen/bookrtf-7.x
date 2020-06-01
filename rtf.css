@@ -1,3 +1,40 @@
+/* rtf.css - stylesheet for the bookrtf RTF output 
+   
+   Supported elements:
+     body
+     h1
+     h2
+     h3
+     li
+     td 
+   
+   Supported classes: 
+     .header-left
+     .header-right
+     .footer-left
+     .footer-right
+   
+   Supported properties [values]:
+     margin-top [px]
+     margin-right [px]
+     margin-bottom [px]
+     margin-left [px]
+     font-family [first value only]
+     font-size [pt]
+     font-weight ["bold"]
+     text-align ["left", "right", "center", "justify"]
+     
+   Note that styles are not cascading (yet) in the rtf document except for the
+   default font.
+   
+   Note that fonts are added to the font table in the order they are found. It
+   is therefore best to start with the body element and define the default font
+   there.
+   
+   Note that values should be in css format including the unit. These will be
+   converted to rtf units and rounded to whole units. Supported values are
+   mentioned between square brackets behind the property. */
+
 body {
   margin-bottom: 13px;
   font-family: "Calibri";
@@ -21,7 +58,7 @@ h3 {
  margin-bottom: 0px;
  font-size: 16pt;
  font-weight: bold;
- text-align: justify;
+ text-align: center;
 }
 
 li {
@@ -29,6 +66,8 @@ li {
 }
 
 td {
+ margin-left: 2px;
+ margin-right: 2px;
  text-align: left;
 }
 
@@ -44,6 +83,7 @@ td {
 .footer-left {
   text-align: left;
 }
+
 .footer-right {
  text-align: right;  
 }
