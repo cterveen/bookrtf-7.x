@@ -3,5 +3,6 @@ description = Exports a book to rtf
 core = 7.x
 package = Book
 dependencies[] = book
+dependencies[] = libraries
 
 configure = admin/config/bookrtf
