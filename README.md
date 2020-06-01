@@ -1,4 +1,4 @@
-# +  bookrtf
+# +  bookrtf-7.x
 A drupal 7 module to export books to RTF format
 
 This module is in development and curruntly mainly written as a proof of
