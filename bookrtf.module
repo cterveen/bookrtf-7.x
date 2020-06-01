@@ -5,21 +5,28 @@
  * A  module that exports books as rtf
  */
  
+
+ /**
+ * Manually load the libraries module to get access to libraries_get_path();
+ * This should not be necessary!
+ */
+include_once(drupal_get_path("module", "libraries") . "/libraries.module");
+ 
  /**
  * Load the PHP simple HTML DOM parser if not done yet
  *
  * get it here: https://simplehtmldom.sourceforge.io/
  * save it to: sites/all/libraries/simle_html_dom/
- */ 
-include_once("sites/all/libraries/simple_html_dom/simple_html_dom.php");
+ */
+include_once(libraries_get_path("simple_html_dom") . "/simple_html_dom.php");
 
  /**
- * Load a css-parser if not done yet
+ * Load the css parser if not done yet
  *
  * get it here: https://github.com/Schepp/CSS-Parser
  * save it to: sites/all/libraries/schepp-css-parser/
  */ 
-include_once("sites/all/libraries/schepp-css-parser/parser.php");
+include_once(libraries_get_path("schepp-css-parser") . "/parser.php");
  
  /**
  * Implements hook_help().
@@ -65,7 +72,6 @@ function bookrtf_menu() {
    
    return $items;
 }
-
 
 /** 
  * Implements hook_form
@@ -127,7 +133,7 @@ function bookrtf_form($form, &$form_state) {
     '#title' => 'Custom frontpage',
     '#default_value' => $bookrtf_front_page['value'],
     '#description' => t('A custom frontpage for your book'));
-    
+      
   $form['bookrtf_download_title'] = array(
     '#type' => 'textfield',
     '#title' => t('Title of download page'),
@@ -165,7 +171,6 @@ function bookrtf_form_validate($form, &$form_state){
     form_set_error('bookrtf_filename', t('You must enter a valid filename that ends with .rtf'));
   }
 }
-
 
  /**
  * Get the contents from print and, convert to RTF, save as file and show a download page.
@@ -240,9 +245,10 @@ function bookrtf_convert($content, $base_url) {
   
   // CLEAN UP spaces after newlines.
   $content = preg_replace("|\s+([\r\n]+)\s+|", "$1", $content);
-  
+
+  // style
   $fonttbl = array();
-  // default style
+  $css = array("main" => array());  
   global $rtf_style;
   $rtf_style = array(
     "body" => "\\sa200\\qc ",
@@ -257,68 +263,23 @@ function bookrtf_convert($content, $base_url) {
     ".footer-right" => "\\qr ");
     
   // get the stylesheet
-  // TODO look for it in the theme directory!
-  $css_file = "sites/all/modules/bookrtf/rtf.css";
+  $css_file = drupal_get_path('theme', $GLOBALS['theme']) . "/css/rtf.css";
+  if (!is_file($css_file)) {
+    $css_file = drupal_get_path('module', "BookRTF") . "/rtf.css";
+  }
+    
   if (is_file($css_file)) {
     $css_parser = new CssParser();
     $css_parser->load_files($css_file);
     $css_parser->parse();
     $css = $css_parser->parsed;
   }
-    
-  // apply
+
   $tags = array_keys($css["main"]);
-  // clear
   foreach ($tags as $tag) {
-    $rtf_style[$tag] = "";
-  }
-  // build
-  foreach ($tags as $tag) {
-    if (array_key_exists("margin-bottom", $css["main"][$tag])) {
-      $rtf_style[$tag] .= "\\sa". bookrtf_converter($css["main"][$tag]["margin-bottom"], "twips", 0);
-    }
-    if (array_key_exists("text-align", $css["main"][$tag])) {
-      // default is left so skip that
-      switch(trim($css["main"][$tag]["text-align"])) {
-        case "center":
-          $rtf_style[$tag] .= "\\qc";
-          break;
-        case "justify":
-          $rtf_style[$tag] .= "\\qj";
-          break;
-        case "left":
-          $rtf_style[$tag] .= "\\ql";
-          break;
-        case "right":
-          $rtf_style[$tag] .= "\\qr";
-          break;
-      }
-    }
-    if (array_key_exists("font-family", $css["main"][$tag])) {
-      $r = array();
-      // In css a family of fonts is given, if the first is not available the second is tried etc.
-      // I'm not sure how rtf / word processors handle that. Just pick the first one and hope for the best.
-      // TODO: first font found is the default font; that's not a problem if body is the first tag and
-      //       font-family is defined there. It is otherwise.
-      preg_match("|^([^,]+),?|", $css["main"][$tag]["font-family"], $r);
-      $font = trim($r[1]);
-      $font = preg_replace("|\"|", "", $font);
-      if (!array_key_exists($font, $fonttbl)) {
-        $fonttbl[$font] = count($fonttbl);
-      }
-      $rtf_style[$tag] .= "\\f" . $fonttbl[$font];
-    }
-    if (array_key_exists("font-size", $css["main"][$tag])) {
-      $rtf_style[$tag] .= "\\fs". bookrtf_converter($css["main"][$tag]["font-size"], "half points", 24);
-    }
-    if (array_key_exists("font-weight", $css["main"][$tag])) {
-      switch(trim($css["main"][$tag]["font-weight"])) {
-        case "bold":
-          $rtf_style[$tag] .= "\\b";
-          break;
-      }
-    }
-    $rtf_style[$tag] .= " ";
+    $result = bookrtf_css2rtf($css["main"][$tag], $fonttbl);
+    $rtf_style[$tag] = $result[0];
+    $fonttbl = $result[1];
   }
   
   // Setup the parser
@@ -461,6 +422,7 @@ function bookrtf_convert($content, $base_url) {
   * Start changing the content from HTML into RTF
   * The tough work is going to be done by bookrtf_traverse. 
   */
+  
   $elements = $html->find('html');
   bookrtf_traverse($elements, $base_url);  
   
@@ -473,9 +435,9 @@ function bookrtf_convert($content, $base_url) {
   // FINAL DOCUMENT
   $content = "{" . $header . "\r\n" . $content . "\r\n" . $footer . "}";
   
-  // the HTML parser adds some spaces which doesn't matter in HTML but does in RTF
+  // remove whitespaces around newlines
   $content = preg_replace("|\s+([\r\n]+)\s+|", "$1", $content);
-  // TODO: sometimes an extra space is added in table cells, find out why
+  // TODO: sometimes an extra space is added in table cells that contain lists, find out why
   $content = preg_replace_callback("|\\intbl{([^\s]+)\s+{|", function($m) { return "intbl{". $m[1] ."{";}, $content);
   
   // SPECIAL CHARACTERS
@@ -650,13 +612,13 @@ function bookrtf_traverse ($elements, $base_url) {
     
     switch($tag) {
       case 'a':
-        // this could be either external links or anchors
+        // this could be either links or anchors
         if ($e->href) {
-          // external link --> replace with footnote
+          // link --> replace with footnote
           $url = $e->href;
           $title = $e->innertext;
           
-          // no use to add a footnote if the link and label are the same
+          // no use to add a footnote if the link and label are the same.
           if (preg_match("|^(https?://)?(mailto:)?" . $title . "/?$|", $url)) {
             $e->outertext = $title;
           }
@@ -677,7 +639,8 @@ function bookrtf_traverse ($elements, $base_url) {
         $e->outertext = "\\tab\\line\r\n";
         break;
       case 'h1':
-        // start of a new chapter --> new page, right header contains chapter title, bookmark for the table of contents
+        // start of a new chapter --> new page, right header contains chapter
+        // title, bookmark for the table of contents
         $title = $e->innertext;
                 
         $rtf = "\\sect\\sftnrstpg\r\n";
@@ -786,7 +749,8 @@ function bookrtf_traverse ($elements, $base_url) {
         
         $rtf = "";
         // if the first item of a nested list close the current paragraph.
-        // TODO: might want to check if the list is inside a paragraph and do that anyway
+        // TODO: might want to check if the list is inside a paragraph and do
+        // that anyway
         if ($level > 1 & $number == 1) {
           $rtf .= "\\par}\r\n";
         }
@@ -804,19 +768,36 @@ function bookrtf_traverse ($elements, $base_url) {
         }
         $rtf .= $e->innertext;
         
-         // finish the paragraph unless it's the last item in a nested list
-        // TODO this will give trouble if there's tekst after the nested list. This text will be included in the last item of the nested list at the moment.        
+        // finish the paragraph unless it's the last item in a nested list
+        // TODO this will give trouble if there's tekst after the nested list.
+        // This text will be included in the last item of the nested list at
+        // the moment.        
         if ($last != 1 | $level == 1) {
           $rtf .= "\\par}\r\n";
         }
-        
-        // if it's the last item of the list add some white space
-        // TODO this creates an empty line, would be nicer if I could make that 200 twips height.
-        if ($last == 1 & $level == 1) {
-          $rtf .= "{\\pard\\sa0\\par}\r\n";
-        }
-
         $e->outertext = $rtf;
+        break;
+      case 'ol':
+        $level = 0;
+        $p = $e->parent();
+        while($p) {
+          if ($p->tag == "ul" | $p->tag == "ol") {
+            if ($level == 0) {
+              $type = $p->tag;
+            }
+            $level++;
+          }
+          $p = $p->parent();
+        }
+        if ($level == 0) {
+          // add some empty space after the list
+          // TODO this creates an empty line, would be nicer if I could make
+          // that 200 twips height.
+          $e->outertext = $e->innertext . "\r\n{\\pard\\sa0\\par}\r\n"; 
+        }
+        else {
+          $e->outertext = $e->innertext;
+        }
         break;
       case 'p':
         $e->outertext = "{\\pard" . $rtf_style["body"] . $e->innertext . "\\par}\r\n";
@@ -931,7 +912,7 @@ function bookrtf_traverse ($elements, $base_url) {
           }
           $rtf .= "\\row\r\n";
         }
-        $rtf .= "}\r\n{\\pard\\par}\r\n";
+        $rtf .= "}\r\n{\\pard\\sa0\\par}\r\n";
           
         $e->outertext = $rtf;
         break;
@@ -940,26 +921,138 @@ function bookrtf_traverse ($elements, $base_url) {
         break;
       case 'u':
         $e->outertext = "{\\ul " . $e->innertext . "}";
-    }    
+        break;
+      case 'ul':
+        $level = 0;
+        $p = $e->parent();
+        while($p) {
+          if ($p->tag == "ul" | $p->tag == "ol") {
+            if ($level == 0) {
+              $type = $p->tag;
+            }
+            $level++;
+          }
+          $p = $p->parent();
+        }
+        if ($level == 0) {
+          // add some empty space after the list
+          // TODO this creates an empty line, would be nicer if I could make that 200 twips height.
+          $e->outertext = $e->innertext . "\r\n{\\pard\\sa0\\par}\r\n"; 
+        }
+        else {
+          $e->outertext = $e->innertext;
+        }
+        break;
+    }
   }
 }
 
-function bookrtf_converter($css, $rtf_units, $default) {
+/**
+ * Convert a CSS-array into the appropriate rtf style elements
+ *
+ * @param css 
+ *   an array of css key-value pairs 
+ * @param fonttbl 
+ *   The fonttable.
+ */
+
+function bookrtf_css2rtf($css, $fonttbl) {
+  $rtf = "";
+  
+  if (array_key_exists("margin-top", $css)) {
+    $rtf .= "\\sb". bookrtf_converter($css["margin-top"], "twips", 0);
+  }
+  if (array_key_exists("margin-right", $css)) {
+    $rtf .= "\\ri". bookrtf_converter($css["margin-right"], "twips", 0);
+  }
+  if (array_key_exists("margin-bottom", $css)) {
+    $rtf .= "\\sa". bookrtf_converter($css["margin-bottom"], "twips", 0);
+  }
+  if (array_key_exists("margin-left", $css)) {
+    $rtf .= "\\li". bookrtf_converter($css["margin-left"], "twips", 0);
+  }
+  if (array_key_exists("text-align", $css)) {
+    // default is left so skip that
+    switch(trim($css["text-align"])) {
+      case "center":
+        $rtf .= "\\qc";
+        break;
+      case "justify":
+        $rtf .= "\\qj";
+        break;
+      case "left":
+        $rtf .= "\\ql";
+        break;
+      case "right":
+        $rtf .= "\\qr";
+        break;
+    }
+  }
+  if (array_key_exists("font-family", $css)) {
+    $r = array();
+    // In css a family of fonts is given, if the first is not available the 
+    // second is tried etc. I'm not sure how rtf / word processors handle that.
+    // Just pick the first one and hope for the best.
+    
+    // TODO: first font found is the default font; that's not a problem if body
+    // is the first tag and font-family is defined there. It is otherwise.
+    
+    preg_match("|^([^,]+),?|", $css["font-family"], $r);
+    $font = trim($r[1]);
+    $font = preg_replace("|\"|", "", $font);
+    if (!array_key_exists($font, $fonttbl)) {
+      $fonttbl[$font] = count($fonttbl);
+    }
+    if ($fonttbl[$font] != 0) {
+      $rtf .= "\\f" . $fonttbl[$font];
+    }
+  }
+  if (array_key_exists("font-size", $css)) {
+    $rtf .= "\\fs". bookrtf_converter($css["font-size"], "half points", 24);
+  }
+  if (array_key_exists("font-weight", $css)) {
+    switch(trim($css["font-weight"])) {
+      case "bold":
+        $rtf .= "\\b";
+        break;
+    }
+  }
+  
+  if (strlen($rtf) > 0) {
+    $rtf .= " ";
+  }
+  return array($rtf, $fonttbl);
+
+}
+
+/**
+ * Converter from CSS units to RTF units
+ *
+ * @param css 
+ *   The value in CSS, this is a string with the value and unit
+ * @param rtf_unit
+ *   The unit for the rtf output. In RTF the unit is not specified, only the
+ *   value is given.
+ * @param default
+ *   The default RTF value in case the unit can't be converted. 
+ */
+
+function bookrtf_converter($css, $rtf_unit, $default) {
   $rtf_value = $default;
   
   preg_match("|(\d+)([a-zA-Z]+)|", $css, $r);
   $css_value = $r[1];
-  $css_units = $r[2];
+  $css_unit = $r[2];
   
   // distance
-  if ($css_units == "px" & $rtf_units == "twips") {
-    $rtf_value = round($css_value / 96 * 1440);
+  if ($css_unit == "px" & $rtf_unit == "twips") {
+    $rtf_value = $css_value / 96 * 1440;
   }
   
   // font size
-  if ($css_units == "pt" & $rtf_units == "half points") {
+  if ($css_unit == "pt" & $rtf_unit == "half points") {
     $rtf_value = $css_value * 2;
   }  
   
-  return $rtf_value;
+  return round($rtf_value);
 }
