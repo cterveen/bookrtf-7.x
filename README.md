@@ -32,6 +32,7 @@ pretty standard document. It has been based on the HTML output of FCKEditor.
 - css parser: https://github.com/Schepp/CSS-Parser
 
 **CSS support:**
+
 Supported elements:
 - body
 - h1
