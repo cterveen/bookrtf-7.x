@@ -6,7 +6,7 @@ concept/demo for the book I'm working with. It's working, but assumes a
 pretty standard document. It has been based on the HTML output of FCKEditor.
 
 **Currently features**
-- Basic HTML elements: p, h1, h2, h3, li, tbody, td, br, img
+- Basic HTML elements: p, h1, h2, h3, li, tbody, td, th, br, img
   - Images are scaled to A4 page width, png, possibly jpg/jpeg (not tested)
   - Tables are scaled to A4 page width, some adaptation in column width
   - Lists can be nested
@@ -24,12 +24,12 @@ pretty standard document. It has been based on the HTML output of FCKEditor.
   - Page number
 
 **Dependencies:**
-- book
-- libraries
-
-**External libaries:**
-- simple HTML DOM: https://simplehtmldom.sourceforge.io/
-- css parser: https://github.com/Schepp/CSS-Parser
+- Drupal modules
+  - book
+  - libraries
+- External libraries
+  - simple HTML DOM: https://simplehtmldom.sourceforge.io/
+  - css parser: https://github.com/Schepp/CSS-Parser
 
 **CSS support:**
 
