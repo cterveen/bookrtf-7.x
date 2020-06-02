@@ -35,11 +35,13 @@ pretty standard document. It has been based on the HTML output of FCKEditor.
 
 Supported elements:
 - body
+- p
 - h1
 - h2
 - h3
 - li
 - td 
+- th
    
 Supported classes: 
 - .header-left
@@ -56,13 +58,6 @@ Supported properties \[values]:
 - font-size \[pt]
 - font-weight \["bold"]
 - text-align \["left", "right", "center", "justify"]
-     
-Note that styles are not cascading (yet) in the rtf document except for the
-default font.
-   
-Note that fonts are added to the font table in the order they are found. It
-is therefore best to start with the body element and define the default font
-there.
    
 Note that values should be in css format including the unit. These will be
 converted to rtf units and rounded to whole units. Supported values are
