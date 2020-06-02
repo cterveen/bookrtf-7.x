@@ -165,6 +165,7 @@ function bookrtf_form($form, &$form_state) {
  *   An array that stores information about the form's current state 
  *   during processing.
  */
+ 
 function bookrtf_form_validate($form, &$form_state){
   $filename = $form_state['values']['bookrtf_filename'];
   if (strlen($filename) <= 4 | substr($filename, -4) != ".rtf") {
@@ -180,18 +181,13 @@ function _bookrtf_page($nid) {
   if (user_access('access content')) {
     $node = node_load($nid);
     if (isset($node->book)) {
-      
       global $base_url;
+      
       $tree = book_menu_subtree_data($node->book);        
       $content = bookrtf_index_traverse($tree);
-      
-      $file = file_destination("public://" . variable_get('bookrtf_filename', "download.rtf"), FILE_EXISTS_REPLACE);
-      $url_rtf = file_create_url("public://" . variable_get('bookrtf_filename', "download.rtf"));
-      $url_pdf = file_create_url("public://gele-boekje.pdf");
-      
       $content = bookrtf_convert($content, $base_url);
       
-      file_put_contents($file, $content);
+      file_put_contents(file_destination("public://" . variable_get('bookrtf_filename', "download.rtf"), FILE_EXISTS_REPLACE), $content);
       
       $bookrtf_download_page = variable_get('bookrtf_download_page', array('value' => '<p><a href = "' . file_create_url('public://' . variable_get('bookrtf_filename', "download.rtf")) . '">Download ' . variable_get('bookrtf_filename', "download.rtf") . '</p>', 'format' => 'full_html'));
       
@@ -245,24 +241,12 @@ function bookrtf_convert($content, $base_url) {
   
   // CLEAN UP spaces after newlines.
   $content = preg_replace("|\s+([\r\n]+)\s+|", "$1", $content);
-
+  
   // style
-  $fonttbl = array();
-  $css = array("main" => array());  
-  global $rtf_style;
-  $rtf_style = array(
-    "body" => "\\sa200\\qc ",
-    "h1" => "\\sa200\\fs32\\b ",
-    "h2" => "\\sa0\\fs16\\b ",
-    "h3" => "\\sa0\\qc\\fs32\\b ",
-    "li" => "\\ql ",
-    "td" => "\\ql ",
-    ".header-left" => "\\ql\\b ",
-    ".header-right" => "\\qr ",
-    ".footer-left" => "\\ql ",
-    ".footer-right" => "\\qr ");
-    
-  // get the stylesheet
+  global $bookrtf_css;
+  global $bookrtf_fonttbl;
+  $css = array("main" => array()); 
+        
   $css_file = drupal_get_path('theme', $GLOBALS['theme']) . "/css/rtf.css";
   if (!is_file($css_file)) {
     $css_file = drupal_get_path('module', "BookRTF") . "/rtf.css";
@@ -273,19 +257,40 @@ function bookrtf_convert($content, $base_url) {
     $css_parser->load_files($css_file);
     $css_parser->parse();
     $css = $css_parser->parsed;
+    $bookrtf_css = $css['main'];
+  }
+  
+  // get the default font from body
+  if (array_key_exists("body", $bookrtf_css)) {
+    if (array_key_exists("font-family", $bookrtf_css["body"])) {
+      preg_match("|^([^,]+),?|", $bookrtf_css["body"]["font-family"], $r);
+      $font = trim($r[1]);
+      $font = preg_replace("|\"|", "", $font);
+      $bookrtf_fonttbl[$font] = 0;
+    }
   }
 
   $tags = array_keys($css["main"]);
-  foreach ($tags as $tag) {
-    $result = bookrtf_css2rtf($css["main"][$tag], $fonttbl);
-    $rtf_style[$tag] = $result[0];
-    $fonttbl = $result[1];
-  }
-  
-  // Setup the parser
-  $html = str_get_html($content);
   
   $book_title = variable_get('bookrtf_title', variable_get('site_name', "Default site name"));
+  
+  /** 
+  * Start with the content.
+  * This is done first because the font table might be appended during the
+  * conversion process.
+  *
+  * The tough work is going to be done by bookrtf_traverse. 
+  */
+  
+  $html = str_get_html($content);
+  $elements = $html->find('html');
+  bookrtf_traverse($elements, $base_url);
+  
+  // dumb the new code back to $content
+  $content = $html;  
+  
+  // strip all remaining tags
+  $content = strip_tags($content);
     
   /**
    * HEADER
@@ -294,11 +299,16 @@ function bookrtf_convert($content, $base_url) {
    * - Table of contents
    * - Start of first page
    */   
-   
+    
   $header = "\\rtf1\\ansi\r\n";
   $header .= "\\deff0 {\\fonttbl ";
-  foreach (array_keys($fonttbl) as $font) {
-    $header .= "{\\f" . $fonttbl[$font] . " " . $font . ";}";
+  if (!is_array($bookrtf_fonttbl)) {
+    $header .= "{\\f0 Calibri;}";
+  }
+  else {
+    foreach (array_keys($bookrtf_fonttbl) as $font) {
+      $header .= "{\\f" . $bookrtf_fonttbl[$font] . " " . $font . ";}";
+    }
   }
   $header .= "}\r\n";
   $header .= "\\vertdoc\\paperh16834\\paperw11909\r\n";
@@ -331,10 +341,10 @@ function bookrtf_convert($content, $base_url) {
   
   // table of contents
   if (variable_get('bookrtf_toc', 1)) {
-    $header .= "{\\pard" .  $rtf_style["h1"] . "Inhoud\r\n";
+    $toc = $html->find("h1");
+    $header .= "{\\pard " .  bookrtf_get_style($toc[0]) . "Inhoud\r\n";
     $header .= "\\par}\r\n{\\pard {";
         
-    $toc = $html->find("h1");
     // remove the first title as this should be the title of the book and does not belong in the toc.
     $book_title_element = array_shift($toc);
     $book_title_element->outertext = "";
@@ -372,7 +382,7 @@ function bookrtf_convert($content, $base_url) {
     $footer .= "{\\headerr\\pard\\qr Index\\par}\r\n";
     $footer .= "{\\footerr\\pard\\qr \\chpgn \\par}\r\n";
     $footer .= "{\\footerl\\pard\\ql \\chpgn \\par}\r\n";
-    $footer .= "{\\pard " . $rtf_style["h1"];
+    $footer .= "{\\pard " . bookrtf_get_style($toc[0]);
     $footer .= "{\\*\\bkmkstart chapterIndex}{\\*\\bkmkend chapterIndex}Index";
     $footer .= "\\par}\r\n";
     $footer .= "\\sect \\sbknone \\cols2\r\n";  
@@ -417,20 +427,6 @@ function bookrtf_convert($content, $base_url) {
     }
     $footer .= "\\par}\r\n";
   }
-  
-  /** 
-  * Start changing the content from HTML into RTF
-  * The tough work is going to be done by bookrtf_traverse. 
-  */
-  
-  $elements = $html->find('html');
-  bookrtf_traverse($elements, $base_url);  
-  
-  // strip all remaining tags
-  $html = strip_tags($html);
-  
-  // dumb the new code back to $content
-  $content = $html;
   
   // FINAL DOCUMENT
   $content = "{" . $header . "\r\n" . $content . "\r\n" . $footer . "}";
@@ -599,7 +595,7 @@ function bookrtf_convert($content, $base_url) {
  */
  
 function bookrtf_traverse ($elements, $base_url) {
-  global $rtf_style;
+  global $bookrtf_css;
 
   foreach ($elements as $e) {
     if ($e->first_child()) {
@@ -644,24 +640,24 @@ function bookrtf_traverse ($elements, $base_url) {
         $title = $e->innertext;
                 
         $rtf = "\\sect\\sftnrstpg\r\n";
-        $rtf .= "{\\headerl\\pard".$rtf_style[".header-left"] . variable_get('bookrtf_title', variable_get('site_name', "Default site name")) . "\\par}\r\n";
-        $rtf .= "{\\headerr\\pard".$rtf_style[".header-right"]. $title . "\\par}\r\n";
-        $rtf .= "{\\footerr\\pard".$rtf_style[".footer-right"]."\\chpgn \\par}\r\n";
-        $rtf .= "{\\footerl\\pard".$rtf_style[".footer-left"]."\\chpgn \\par}\r\n";
+        $rtf .= "{\\headerl\\pard ".bookrtf_css2rtf($bookrtf_css[".header-left"]) . variable_get('bookrtf_title', variable_get('site_name', "Default site name")) . "\\par}\r\n";
+        $rtf .= "{\\headerr\\pard ".bookrtf_css2rtf($bookrtf_css[".header-right"]). $title . "\\par}\r\n";
+        $rtf .= "{\\footerr\\pard ".bookrtf_css2rtf($bookrtf_css[".footer-right"])."\\chpgn \\par}\r\n";
+        $rtf .= "{\\footerl\\pard ".bookrtf_css2rtf($bookrtf_css[".footer-left"])."\\chpgn \\par}\r\n";
         // if the chapter starts with a number it should be in the index, add a bookmark for it
         if (preg_match("|^(\d+)\.\s|", $title, $match)) {
           $chapter = $match[1];
           $rtf .= "{\\*\\bkmkstart chapter".$chapter."}{\\*\\bkmkend chapter".$chapter."}\r\n";
         }
-        $rtf .= "{\\pard" . $rtf_style["h1"] . $title . "\\par}\r\n";
+        $rtf .= "{\\pard " . bookrtf_get_style($e) . $title . "\\par}\r\n";
         
         $e->outertext = $rtf;
         break;
       case 'h2':
-        $e->outertext = "{\\pard" . $rtf_style["h2"] . $e->innertext . "\\par}\r\n";
+        $e->outertext = "{\\pard " . bookrtf_get_style($e) . $e->innertext . "\\par}\r\n";
         break;
       case 'h3': 
-        $e->outertext = "{\\pard" . $rtf_style["h3"] . $e->innertext . "\\par}\r\n";     
+        $e->outertext = "{\\pard " . bookrtf_get_style($e) . $e->innertext . "\\par}\r\n";     
         break;
       case 'i': 
         $e->outertext = "{\\i " . $e->innertext . "}";
@@ -754,7 +750,7 @@ function bookrtf_traverse ($elements, $base_url) {
         if ($level > 1 & $number == 1) {
           $rtf .= "\\par}\r\n";
         }
-        $rtf .= "{\\pard" . $rtf_style["li"];
+        $rtf .= "{\\pard " . bookrtf_get_style($e);
         
         $firstindent = -360;
         $lineindent = 720 * $level;
@@ -775,32 +771,15 @@ function bookrtf_traverse ($elements, $base_url) {
         if ($last != 1 | $level == 1) {
           $rtf .= "\\par}\r\n";
         }
+        if ($level == 1 & $last == 1) {
+          // add some empty space after the list
+          // TODO this creates an empty line, would be nicer if I could make a configurable height.
+          $rtf .= "\r\n{\\pard\\sa0\\par}\r\n"; 
+        }
         $e->outertext = $rtf;
         break;
-      case 'ol':
-        $level = 0;
-        $p = $e->parent();
-        while($p) {
-          if ($p->tag == "ul" | $p->tag == "ol") {
-            if ($level == 0) {
-              $type = $p->tag;
-            }
-            $level++;
-          }
-          $p = $p->parent();
-        }
-        if ($level == 0) {
-          // add some empty space after the list
-          // TODO this creates an empty line, would be nicer if I could make
-          // that 200 twips height.
-          $e->outertext = $e->innertext . "\r\n{\\pard\\sa0\\par}\r\n"; 
-        }
-        else {
-          $e->outertext = $e->innertext;
-        }
-        break;
       case 'p':
-        $e->outertext = "{\\pard" . $rtf_style["body"] . $e->innertext . "\\par}\r\n";
+        $e->outertext = "{\\pard " . bookrtf_get_style($e) . $e->innertext . "\\par}\r\n";
         break;
       case 'strong': 
         $e->outertext = "{\\b " . $e->innertext . "}";
@@ -839,6 +818,7 @@ function bookrtf_traverse ($elements, $base_url) {
               continue;
             }
             $cur_cols++;
+            $table[$num_rows][$cur_cols]['element'] = $c;
             $table[$num_rows][$cur_cols]['innertext'] = $c->innertext;
             $table[$num_rows][$cur_cols]['col'] = $cur_cols;
             if ($c->colspan) {
@@ -908,7 +888,7 @@ function bookrtf_traverse ($elements, $base_url) {
             $rtf .= floor($width_in_twips * $colright[$cell['col']+$cell['colspan']-1]);
           }
           foreach ($row as $cell) {
-            $rtf .= "\\intbl{" . $rtf_style["td"] . $cell['innertext'] . "}\\cell\r\n";
+            $rtf .= "\\intbl{" . bookrtf_get_style($cell['element']) . $cell['innertext'] . "}\\cell\r\n";
           }
           $rtf .= "\\row\r\n";
         }
@@ -922,41 +902,99 @@ function bookrtf_traverse ($elements, $base_url) {
       case 'u':
         $e->outertext = "{\\ul " . $e->innertext . "}";
         break;
-      case 'ul':
-        $level = 0;
-        $p = $e->parent();
-        while($p) {
-          if ($p->tag == "ul" | $p->tag == "ol") {
-            if ($level == 0) {
-              $type = $p->tag;
-            }
-            $level++;
-          }
-          $p = $p->parent();
-        }
-        if ($level == 0) {
-          // add some empty space after the list
-          // TODO this creates an empty line, would be nicer if I could make that 200 twips height.
-          $e->outertext = $e->innertext . "\r\n{\\pard\\sa0\\par}\r\n"; 
-        }
-        else {
-          $e->outertext = $e->innertext;
-        }
-        break;
     }
   }
+}
+
+/**
+ * Get the appropriate style for an HTML element and return string of rtf style
+ * commands.
+ *
+ * @param e 
+ *   an element from the html table
+ */
+
+function bookrtf_get_style($e) {
+  global $bookrtf_css;
+  
+  // most of these aren't used
+  $css_inherit = array(
+    "border-collapse" => 1,
+    "border-spacing" => 1,
+    "caption-side" => 1,
+    "color" => 1,
+    "cursor" => 1,
+    "direction" => 1,
+    "empty-cells" => 1,
+    "font-family" => 1,
+    "font-size" => 1,
+    "font-style" => 1,
+    "font-variant" => 1,
+    "font-weight" => 1,
+    "font-size-adjust" => 1,
+    "font-stretch" => 1,
+    "font" => 1,
+    "letter-spacing" => 1,
+    "line-height" => 1,
+    "list-style-image" => 1,
+    "list-style-position" => 1,
+    "list-style-type" => 1,
+    "list-style" => 1,
+    "orphans" => 1,
+    "quotes" => 1,
+    "tab-size" => 1,
+    "text-align" => 1,
+    "text-align-last" => 1,
+    "text-decoration-color" => 1,
+    "text-indent" => 1,
+    "text-justify" => 1,
+    "text-shadow" => 1,
+    "text-transform" => 1,
+    "visibility" => 1,
+    "white-space" => 1,
+    "widows" => 1,
+    "word-break" => 1,
+    "word-spacing" => 1,
+    "word-wrap" => 1);
+  
+  $css = array();
+  if (array_key_exists($e->tag, $bookrtf_css)) {
+    $css = $bookrtf_css[$e->tag];
+  }
+  
+  # start the cascade
+  $p = $e->parent();
+  while ($p) {
+    if (array_key_exists($p->tag, $bookrtf_css)) {
+      foreach (array_keys($bookrtf_css[$p->tag]) as $key) {
+        // inheritance by default
+        if (!array_key_exists($key, $css) & array_key_exists($key, $css_inherit)) {
+          $css[$key] = $bookrtf_css[$p->tag][$key];
+        }
+        // inheritance by setting
+        if (array_key_exists($key, $css)) {
+          if (trim($css[$key]) == "inherit") {
+            $css[$key] = $bookrtf_css[$p->tag][$key];
+          }
+        }
+      }      
+    }  
+    $p = $p->parent();
+  }
+  
+  return bookrtf_css2rtf($css);
 }
 
 /**
  * Convert a CSS-array into the appropriate rtf style elements
  *
  * @param css 
- *   an array of css key-value pairs 
- * @param fonttbl 
- *   The fonttable.
+ *   an array of css key-value pairs
  */
 
-function bookrtf_css2rtf($css, $fonttbl) {
+function bookrtf_css2rtf($css) {
+  global $bookrtf_fonttbl;
+
   $rtf = "";
   
   if (array_key_exists("margin-top", $css)) {
@@ -994,18 +1032,16 @@ function bookrtf_css2rtf($css, $fonttbl) {
     // second is tried etc. I'm not sure how rtf / word processors handle that.
     // Just pick the first one and hope for the best.
     
-    // TODO: first font found is the default font; that's not a problem if body
-    // is the first tag and font-family is defined there. It is otherwise.
-    
     preg_match("|^([^,]+),?|", $css["font-family"], $r);
     $font = trim($r[1]);
     $font = preg_replace("|\"|", "", $font);
-    if (!array_key_exists($font, $fonttbl)) {
-      $fonttbl[$font] = count($fonttbl);
+    
+    if (!array_key_exists($font, $bookrtf_fonttbl)) {
+      $bookrtf_fonttbl[$font] = count($bookrtf_fonttbl);
     }
-    if ($fonttbl[$font] != 0) {
-      $rtf .= "\\f" . $fonttbl[$font];
-    }
+    if ($bookrtf_fonttbl[$font] != 0) {
+       $rtf .= "\\f" . $bookrtf_fonttbl[$font];
+     }
   }
   if (array_key_exists("font-size", $css)) {
     $rtf .= "\\fs". bookrtf_converter($css["font-size"], "half points", 24);
@@ -1021,8 +1057,7 @@ function bookrtf_css2rtf($css, $fonttbl) {
   if (strlen($rtf) > 0) {
     $rtf .= " ";
   }
-  return array($rtf, $fonttbl);
-
+  return $rtf;
 }
 
 /**
@@ -1041,6 +1076,9 @@ function bookrtf_converter($css, $rtf_unit, $default) {
   $rtf_value = $default;
   
   preg_match("|(\d+)([a-zA-Z]+)|", $css, $r);
+  if (count($r) == 0) {
+    return $rtf_value;
+  }
   $css_value = $r[1];
   $css_unit = $r[2];
   
