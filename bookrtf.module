@@ -245,20 +245,22 @@ function bookrtf_convert($content, $base_url) {
   // style
   global $bookrtf_css;
   global $bookrtf_fonttbl;
-  $css = array("main" => array()); 
-        
-  $css_file = drupal_get_path('theme', $GLOBALS['theme']) . "/css/rtf.css";
-  if (!is_file($css_file)) {
-    $css_file = drupal_get_path('module', "BookRTF") . "/rtf.css";
-  }
-    
-  if (is_file($css_file)) {
-    $css_parser = new CssParser();
-    $css_parser->load_files($css_file);
-    $css_parser->parse();
-    $css = $css_parser->parsed;
-    $bookrtf_css = $css['main'];
-  }
+  $css = array("main" => array());
+  
+  foreach (array(drupal_get_path('module', "BookRTF") . "/rtf.css", drupal_get_path('theme', $GLOBALS['theme']) . "/css/rtf.css") as $css_file) {
+    if (is_file($css_file)) {
+      $css_parser = new CssParser();
+      $css_parser->load_files($css_file);
+      $css_parser->parse();
+      $css = $css_parser->parsed;
+      
+      foreach (array_keys($css['main']) as $selector) {
+        foreach(array_keys($css['main'][$selector]) as $property) {
+          $bookrtf_css[$selector][$property] = $css['main'][$selector][$property];
+        }
+      }
+    }  
+  }    
   
   // get the default font from body
   if (array_key_exists("body", $bookrtf_css)) {
@@ -958,28 +960,35 @@ function bookrtf_get_style($e) {
     "word-wrap" => 1);
   
   $css = array();
-  if (array_key_exists($e->tag, $bookrtf_css)) {
-    $css = $bookrtf_css[$e->tag];
-  }
   
+  $level = 0;
+    
   # start the cascade
-  $p = $e->parent();
-  while ($p) {
-    if (array_key_exists($p->tag, $bookrtf_css)) {
-      foreach (array_keys($bookrtf_css[$p->tag]) as $key) {
+  while ($e) {
+    # get css from the element attribute
+    
+    # get css from the element class
+    
+    # get css from the element id
+    
+    # get css associated with the element
+    $tag = $e->tag;
+    if (array_key_exists($tag, $bookrtf_css)) {
+      foreach (array_keys($bookrtf_css[$tag]) as $key) {
         // inheritance by default
-        if (!array_key_exists($key, $css) & array_key_exists($key, $css_inherit)) {
-          $css[$key] = $bookrtf_css[$p->tag][$key];
+        if (!array_key_exists($key, $css) & ($level == 0 | array_key_exists( $key, $css_inherit))) {
+          $css[$key] = $bookrtf_css[$tag][$key];
         }
         // inheritance by setting
         if (array_key_exists($key, $css)) {
           if (trim($css[$key]) == "inherit") {
-            $css[$key] = $bookrtf_css[$p->tag][$key];
+            $css[$key] = $bookrtf_css[$tag][$key];
           }
         }
       }      
     }  
-    $p = $p->parent();
+    $e = $e->parent();
+    $level++;
   }
   
   return bookrtf_css2rtf($css);
@@ -998,16 +1007,16 @@ function bookrtf_css2rtf($css) {
   $rtf = "";
   
   if (array_key_exists("margin-top", $css)) {
-    $rtf .= "\\sb". bookrtf_converter($css["margin-top"], "twips", 0);
+    $rtf .= "\\sb". bookrtf_convert_length($css["margin-top"]);
   }
   if (array_key_exists("margin-right", $css)) {
-    $rtf .= "\\ri". bookrtf_converter($css["margin-right"], "twips", 0);
+    $rtf .= "\\ri". bookrtf_convert_length($css["margin-right"]);
   }
   if (array_key_exists("margin-bottom", $css)) {
-    $rtf .= "\\sa". bookrtf_converter($css["margin-bottom"], "twips", 0);
+    $rtf .= "\\sa". bookrtf_convert_length($css["margin-bottom"]);
   }
   if (array_key_exists("margin-left", $css)) {
-    $rtf .= "\\li". bookrtf_converter($css["margin-left"], "twips", 0);
+    $rtf .= "\\li". bookrtf_convert_length($css["margin-left"]);
   }
   if (array_key_exists("text-align", $css)) {
     // default is left so skip that
@@ -1044,12 +1053,14 @@ function bookrtf_css2rtf($css) {
      }
   }
   if (array_key_exists("font-size", $css)) {
-    $rtf .= "\\fs". bookrtf_converter($css["font-size"], "half points", 24);
+    $rtf .= "\\fs". bookrtf_convert_font_size($css["font-size"]);
   }
   if (array_key_exists("font-weight", $css)) {
     switch(trim($css["font-weight"])) {
       case "bold":
         $rtf .= "\\b";
+        break;
+      case "normal":
         break;
     }
   }
@@ -1061,36 +1072,79 @@ function bookrtf_css2rtf($css) {
 }
 
 /**
- * Converter from CSS units to RTF units
+ * Converter CSS length to RTF's twips
  *
  * @param css 
  *   The value in CSS, this is a string with the value and unit
- * @param rtf_unit
- *   The unit for the rtf output. In RTF the unit is not specified, only the
- *   value is given.
- * @param default
- *   The default RTF value in case the unit can't be converted. 
  */
 
-function bookrtf_converter($css, $rtf_unit, $default) {
-  $rtf_value = $default;
-  
-  preg_match("|(\d+)([a-zA-Z]+)|", $css, $r);
+function bookrtf_convert_length($css) {
+  // check if css has the right format
+  preg_match("|^(\d+\.?\d*)([a-zA-Z]+)$|", trim($css), $r);
   if (count($r) == 0) {
-    return $rtf_value;
+    return 0;
   }
   $css_value = $r[1];
   $css_unit = $r[2];
   
-  // distance
-  if ($css_unit == "px" & $rtf_unit == "twips") {
-    $rtf_value = $css_value / 96 * 1440;
+  // length
+  if ($css_unit == "cm") {
+    return round($css_value / 2.54 * 1440);
+  }
+  if ($css_unit == "in") {
+    return round($css_value * 1440);
+  }
+  if ($css_unit == "mm") {
+    return round($css_value / 2.54 * 144);
+  }
+  if ($css_unit == "pt") {
+    return round($css_value * 20);
+  }
+  if ($css_unit == "px") {
+    return round($css_value * 15);
+  }
+  if ($css_unit == "pc") {
+    return round($css_value * 240);
   }
   
+  return 0;
+}
+
+/**
+ * Converter from CSS font size to RTF's half points
+ *
+ * @param css 
+ *   The value in CSS, this is a string with the value and unit
+ */
+
+function bookrtf_convert_font_size($css) {
+  // check if css has the right format
+  preg_match("|^(\d+\.?\d*)([a-zA-Z]+)$|", trim($css), $r);
+  if (count($r) == 0) {
+    return 36;
+  }
+  $css_value = $r[1];
+  $css_unit = $r[2];
+
   // font size
-  if ($css_unit == "pt" & $rtf_unit == "half points") {
-    $rtf_value = $css_value * 2;
-  }  
+  if ($css_unit == "cm") {
+    return round($css_value / 2.54 * 144);
+  }
+  if ($css_unit == "in") {
+    return round($css_value * 144);
+  }
+  if ($css_unit == "mm") {
+    return  round($css_value / 2.54 * 14.4);
+  }
+  if ($css_unit == "pt") {
+    return round($css_value * 2);
+  } 
+  if ($css_unit == "px") {
+    return round($css_value * 1.5);
+  }
+  if ($css_unit == "pc") {
+    return round($css_value * 24);
+  }
   
-  return round($rtf_value);
+  return 36;
 }
