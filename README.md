@@ -50,13 +50,13 @@ Supported classes:
 - .footer-right
    
 Supported properties \[values]:
-- margin-top \[px]
-- margin-right \[px]
-- margin-bottom \[px]
-- margin-left \[px]
+- margin-top \[cm mm in px pt pc]
+- margin-right \[cm mm in px pt pc]
+- margin-bottom \[cm mm in px pt pc]
+- margin-left \[cm mm in px pt pc]
 - font-family \[first value only]
-- font-size \[pt]
-- font-weight \["bold"]
+- font-size \[cm mm in px pt pc]
+- font-weight \["bold", "normal"]
 - text-align \["left", "right", "center", "justify"]
    
 Note that values should be in css format including the unit. These will be
