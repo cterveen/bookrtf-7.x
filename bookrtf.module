@@ -110,7 +110,14 @@ function bookrtf_form($form, &$form_state) {
     '#required' => FALSE,
   );
   
-  $form['bookrtf_flyleaf'] = array (
+  
+  $form['bookrtf_front'] = array(
+    '#type' => 'checkbox',
+    '#title' => 'Include custom frontpage',
+    '#default_value' => variable_get('bookrtf_front', 1),
+    '#description' => t('The front page can be defined below'),);
+  
+  $form['bookrtf_flyleaf'] = array(
     '#type' => 'checkbox',
     '#title' => 'Include flyleaf',
     '#default_value' => variable_get('bookrtf_flyleaf', 1));
@@ -124,6 +131,46 @@ function bookrtf_form($form, &$form_state) {
     '#type' => 'checkbox',
     '#title' => 'Include index',
     '#default_value' => variable_get('bookrtf_index', 0));
+    
+  $form['bookrtf_header_left'] = array(
+    '#type' => 'select',
+    '#title' => t('Left header'),
+    '#options' => array(
+      0 => "Nothing",
+      1 => "Book title",
+      2 => "Chapter title",
+      3 => "Page number"),
+    '#default_value' => variable_get('bookrtf_header_left', 0));
+    
+  $form['bookrtf_header_right'] = array(
+    '#type' => 'select',
+    '#title' => t('Right header'),
+    '#options' => array(
+      0 => "Nothing",
+      1 => "Book title",
+      2 => "Chapter title",
+      3 => "Page number"),
+    '#default_value' => variable_get('bookrtf_header_right', 0));  
+    
+  $form['bookrtf_footer_left'] = array(
+    '#type' => 'select',
+    '#title' => t('Left footer'),
+    '#options' => array(
+      0 => "Nothing",
+      1 => "Book title",
+      2 => "Chapter title",
+      3 => "Page number"),
+    '#default_value' => variable_get('bookrtf_footer_left', 0));  
+   
+  $form['bookrtf_footer_right'] = array(
+    '#type' => 'select',
+    '#title' => t('Right footer'),
+    '#options' => array(
+      0 => "Nothing",
+      1 => "Book title",
+      2 => "Chapter title",
+      3 => "Page number"),
+    '#default_value' => variable_get('bookrtf_footer_right', 0));   
     
   $bookrtf_front_page = variable_get('bookrtf_front_page', array('value' => '<h3>'.variable_get('bookrtf_title', variable_get('site_name', "Default site name")).'</h3>', 'format' => 'full_html'));
   
@@ -141,8 +188,7 @@ function bookrtf_form($form, &$form_state) {
     '#size' => 20,
     '#maxlength' => 20,
     '#description' => t('The title to use for the download page'),
-    '#required' => TRUE,
-  );    
+    '#required' => TRUE,);    
     
   $bookrtf_download_page = variable_get('bookrtf_download_page', array('value' => '<p><a href = "' . file_create_url('public://' . variable_get('bookrtf_filename', "download.rtf")) . '">Download ' . variable_get('bookrtf_filename', "download.rtf") . '</p>', 'format' => 'full_html'));
   $form['bookrtf_download_page'] = array(
@@ -236,6 +282,8 @@ function bookrtf_index_traverse($tree) {
  */
 
 function bookrtf_convert($content, $base_url) {
+  global $bookrtf_firstpage;
+  $bookrtf_firstpage = 1;
   // put some html tags around it so we can push it into the html converter.
   $content = "<html><body>" . $content . "</body></html>";
   
@@ -317,19 +365,25 @@ function bookrtf_convert($content, $base_url) {
   $header .= "\\fet0\\facingp\\ftnbj\\ftnrstpg\r\n";
   $header .= "\\plain\r\n";
   
-  // preparing to make this a form element
-  $bookrtf_front_page = variable_get('bookrtf_front_page', array('value' => '<h3>'.variable_get('bookrtf_title', variable_get('site_name', "Default site name")).'</h3>', 'format' => 'full_html'));
-  $bookrtf_front_page["value"] = "<html><body><h3>" . $bookrtf_front_page["value"] . "</body></html>";
-  $title_html = str_get_html($bookrtf_front_page["value"]);
-  $elements = $title_html->find('html');
-  bookrtf_traverse($elements, $base_url);
-  $title_html = strip_tags($title_html);
-  $header .= $title_html;
+  if (variable_get('bookrtf_front', 1)) {
+    $bookrtf_firstpage = 0;
+    $bookrtf_front_page = variable_get('bookrtf_front_page', array('value' => '<h3>'.$book_title.'</h3>', 'format' => 'full_html'));
+    $bookrtf_front_page["value"] = "<html><body><h3>" . $bookrtf_front_page["value"] . "</body></html>";
+    $title_html = str_get_html($bookrtf_front_page["value"]);
+    $elements = $title_html->find('html');
+    bookrtf_traverse($elements, $base_url);
+    $title_html = strip_tags($title_html);
+    $header .= $title_html;
+  }  
 
-  // flyleaf
-  $header .= "\\sect\r\n";
-  
+  // flyleaf  
   if (variable_get('bookrtf_flyleaf', 1)) {
+    if ($bookrtf_firstpage == 1) {
+      $bookrtf_firstpage = 0;
+    }
+    else {
+      $header .= "\\sect\\sftnrstpg\r\n";
+    }
     $header .= "{\\pard\\qc";
     $header .= "{\\b " . $book_title . "}\\line\r\n";
     if (isset($base_url)) {
@@ -337,13 +391,19 @@ function bookrtf_convert($content, $base_url) {
     }
     $header .= "\\line\r\n\\line\r\n";
     $date = new DateTime();
-    $header .= "Gegenereerd: " . date_format($date, "d-m-Y") . " \\par}";
+    $header .= "Gegenereerd: " . date_format($date, "d-m-Y") . " \\par}\r\n";
   }
-  $header .= "\\page\r\n";
   
+  $toc = $html->find("h1");
   // table of contents
   if (variable_get('bookrtf_toc', 1)) {
-    $toc = $html->find("h1");
+    if ($bookrtf_firstpage == 1) {
+      $bookrtf_firstpage = 0;
+    }
+    else {
+      $header .= "\\sect\\sftnrstpg\r\n";
+    }
+    
     $header .= "{\\pard " .  bookrtf_get_style($toc[0]) . "Inhoud\r\n";
     $header .= "\\par}\r\n{\\pard {";
         
@@ -598,7 +658,7 @@ function bookrtf_convert($content, $base_url) {
  
 function bookrtf_traverse ($elements, $base_url) {
   global $bookrtf_css;
-
+  
   foreach ($elements as $e) {
     if ($e->first_child()) {
       $children = $e->children();
@@ -641,11 +701,72 @@ function bookrtf_traverse ($elements, $base_url) {
         // title, bookmark for the table of contents
         $title = $e->innertext;
                 
-        $rtf = "\\sect\\sftnrstpg\r\n";
-        $rtf .= "{\\headerl\\pard ".bookrtf_css2rtf($bookrtf_css[".header-left"]) . variable_get('bookrtf_title', variable_get('site_name', "Default site name")) . "\\par}\r\n";
-        $rtf .= "{\\headerr\\pard ".bookrtf_css2rtf($bookrtf_css[".header-right"]). $title . "\\par}\r\n";
-        $rtf .= "{\\footerr\\pard ".bookrtf_css2rtf($bookrtf_css[".footer-right"])."\\chpgn \\par}\r\n";
-        $rtf .= "{\\footerl\\pard ".bookrtf_css2rtf($bookrtf_css[".footer-left"])."\\chpgn \\par}\r\n";
+        global $bookrtf_firstpage;
+        $rtf = "";
+        if ($bookrtf_firstpage == 1 & variable_get('bookrtf_front', 1) == 0 & variable_get('bookrtf_flyleaf', 1) == 0 & variable_get('bookrtf_toc', 1) == 0) {
+          $bookrtf_firstpage = 0;
+        }
+        else {
+          $rtf .= "\\sect\\sftnrstpg\r\n";
+        }
+        
+        switch(variable_get('bookrtf_header_left', 0)) {
+          case 0:
+            break;
+          case 1:
+            $rtf .= "{\\headerl\\pard ".bookrtf_css2rtf($bookrtf_css[".header-left"]) . variable_get('bookrtf_title', variable_get('site_name', "Default site name")) . "\\par}\r\n";
+            break;
+          case 2:
+            $rtf .= "{\\headerl\\pard ".bookrtf_css2rtf($bookrtf_css[".header-left"]). $title . "\\par}\r\n";
+            break;
+          case 3:  
+            $rtf .= "{\\headerl\\pard ".bookrtf_css2rtf($bookrtf_css[".header-left"])."\\chpgn \\par}\r\n";
+            break;
+        }
+        
+        switch(variable_get('bookrtf_header_right', 0)) {
+          case 0:
+            break;
+          case 1:
+            $rtf .= "{\\headerr\\pard ".bookrtf_css2rtf($bookrtf_css[".header-right"]) . variable_get('bookrtf_title', variable_get('site_name', "Default site name")) . "\\par}\r\n";
+            break;
+          case 2:
+            $rtf .= "{\\headerr\\pard ".bookrtf_css2rtf($bookrtf_css[".header-right"]). $title . "\\par}\r\n";
+            break;
+          case 3:  
+            $rtf .= "{\\headerr\\pard ".bookrtf_css2rtf($bookrtf_css[".header-right"])."\\chpgn \\par}\r\n";
+            break;
+        }
+        
+        switch(variable_get('bookrtf_footer_left', 0)) {
+          case 0:
+            break;
+          case 1:
+            $rtf .= "{\\footerl\\pard ".bookrtf_css2rtf($bookrtf_css[".footer-left"]) . variable_get('bookrtf_title', variable_get('site_name', "Default site name")) . "\\par}\r\n";
+            break;
+          case 2:
+            $rtf .= "{\\footerl\\pard ".bookrtf_css2rtf($bookrtf_css[".footer-left"]). $title . "\\par}\r\n";
+            break;
+          case 3:  
+            $rtf .= "{\\footerl\\pard ".bookrtf_css2rtf($bookrtf_css[".footer-left"])."\\chpgn \\par}\r\n";
+            break;
+        }
+        
+        switch(variable_get('bookrtf_footer_right', 0)) {
+          case 0:
+            break;
+          case 1:
+            $rtf .= "{\\footerr\\pard ".bookrtf_css2rtf($bookrtf_css[".footer-right"]) . variable_get('bookrtf_title', variable_get('site_name', "Default site name")) . "\\par}\r\n";
+            break;
+          case 2:
+            $rtf .= "{\\footerr\\pard ".bookrtf_css2rtf($bookrtf_css[".footer-right"]). $title . "\\par}\r\n";
+            break;
+          case 3:  
+            $rtf .= "{\\footerr\\pard ".bookrtf_css2rtf($bookrtf_css[".footer-right"])."\\chpgn \\par}\r\n";
+            break;
+        }          
+          
+
         // if the chapter starts with a number it should be in the index, add a bookmark for it
         if (preg_match("|^(\d+)\.\s|", $title, $match)) {
           $chapter = $match[1];
@@ -985,7 +1106,7 @@ function bookrtf_get_style($e) {
             $css[$key] = $bookrtf_css[$tag][$key];
           }
         }
-      }      
+      }
     }  
     $e = $e->parent();
     $level++;
@@ -1003,8 +1124,13 @@ function bookrtf_get_style($e) {
 
 function bookrtf_css2rtf($css) {
   global $bookrtf_fonttbl;
+  
+  if (!is_array($css)) {
+    return "";
+  }
 
   $rtf = "";
+  
   
   if (array_key_exists("margin-top", $css)) {
     $rtf .= "\\sb". bookrtf_convert_length($css["margin-top"]);
@@ -1121,7 +1247,7 @@ function bookrtf_convert_font_size($css) {
   // check if css has the right format
   preg_match("|^(\d+\.?\d*)([a-zA-Z]+)$|", trim($css), $r);
   if (count($r) == 0) {
-    return 36;
+    return 24;
   }
   $css_value = $r[1];
   $css_unit = $r[2];
@@ -1146,5 +1272,5 @@ function bookrtf_convert_font_size($css) {
     return round($css_value * 24);
   }
   
-  return 36;
+  return 24;
 }
