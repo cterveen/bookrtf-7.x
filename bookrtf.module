@@ -293,6 +293,7 @@ function bookrtf_convert($content, $base_url) {
   // style
   global $bookrtf_css;
   global $bookrtf_fonttbl;
+  global $bookrtf_colortbl;
   $css = array("main" => array());
   
   foreach (array(drupal_get_path('module', "BookRTF") . "/rtf.css", drupal_get_path('theme', $GLOBALS['theme']) . "/css/rtf.css") as $css_file) {
@@ -319,7 +320,10 @@ function bookrtf_convert($content, $base_url) {
       $bookrtf_fonttbl[$font] = 0;
     }
   }
-
+  
+  // declare the colortable but no need to set a default
+  $bookrtf_colortbl = array();
+  
   $tags = array_keys($css["main"]);
   
   $book_title = variable_get('bookrtf_title', variable_get('site_name', "Default site name"));
@@ -361,8 +365,17 @@ function bookrtf_convert($content, $base_url) {
     }
   }
   $header .= "}\r\n";
+  if (count($bookrtf_colortbl) > 0) {
+    $header .= "{\\colortbl ;";
+    foreach (array_keys($bookrtf_colortbl) as $color) {
+      $header .= " " . $color . ";";
+    }
+    $header .= "}\r\n";
+  }
+  
+  
   $header .= "\\vertdoc\\paperh16834\\paperw11909\r\n";
-  $header .= "\\fet0\\facingp\\ftnbj\\ftnrstpg\r\n";
+  $header .= "\\fet0\\facingp\\ftnbj\\ftnrstpg\\widowctrl\r\n";
   $header .= "\\plain\r\n";
   
   if (variable_get('bookrtf_front', 1)) {
@@ -777,7 +790,7 @@ function bookrtf_traverse ($elements, $base_url) {
         $e->outertext = $rtf;
         break;
       case 'h2':
-        $e->outertext = "{\\pard " . bookrtf_get_style($e) . $e->innertext . "\\par}\r\n";
+        $e->outertext = "{\\pard\\keepn " . bookrtf_get_style($e) . $e->innertext . "\\par}\r\n";
         break;
       case 'h3': 
         $e->outertext = "{\\pard " . bookrtf_get_style($e) . $e->innertext . "\\par}\r\n";     
@@ -1124,6 +1137,7 @@ function bookrtf_get_style($e) {
 
 function bookrtf_css2rtf($css) {
   global $bookrtf_fonttbl;
+  global $bookrtf_colortbl;
   
   if (!is_array($css)) {
     return "";
@@ -1190,6 +1204,12 @@ function bookrtf_css2rtf($css) {
         break;
     }
   }
+  if (array_key_exists("color", $css)) {
+    $color = bookrtf_convert_color($css["color"]);
+    if ($color != 0) {
+      $rtf .= "\\cf" . $color;
+    }
+  }
   
   if (strlen($rtf) > 0) {
     $rtf .= " ";
@@ -1198,7 +1218,200 @@ function bookrtf_css2rtf($css) {
 }
 
 /**
- * Converter CSS length to RTF's twips
+ * Convert CSS colors to a position in the colortable
+ *
+ * @param css 
+ *   The value in CSS, this is a string with the value and unit
+ */
+function bookrtf_convert_color($css) {
+  global $bookrtf_colortbl;
+  
+  $color = "";
+  if (preg_match("|^rgb\((\d+),(\d+),(\d+)\)$|", trim($css) ,$r)) {
+    $red = $r[1];
+    $green = $r[2];
+    $blue = $r[3];
+    if ($red >=0 & $red <= 255 & $green >=0 & $green <= 255 & $blue >=0 & $blue <= 255) {
+      $color = "\\red" . $red . "\\green" . $green . "\\blue" . $blue;
+    }
+  }
+  if (preg_match("|^\#([0-9a-fA-F][0-9a-fA-F])([0-9a-fA-F][0-9a-fA-F])([0-9a-fA-F][0-9a-fA-F])$|", trim($css), $r)) {
+    $red = hexdec($r[1]);
+    $green = hexdec($r[2]);
+    $blue = hexdec($r[3]);
+    if ($red >=0 & $red <= 255 & $green >=0 & $green <= 255 & $blue >=0 & $blue <= 255) {
+      $color = "\\red" . $red . "\\green" . $green . "\\blue" . $blue;
+    }
+  }
+  if (preg_match("|^\w+$|", trim($css))) {
+    $css_color_names = array(
+      "aliceblue" => "\\red240\\green248\\blue255",
+      "antiquewhite" => "\\red250\\green235\\blue215",
+      "aqua" => "\\red0\\green255\\blue255",
+      "aquamarine" => "\\red127\\green255\\blue212",
+      "azure" => "\\red240\\green255\\blue255",
+      "beige" => "\\red245\\green245\\blue220",
+      "bisque" => "\\red255\\green228\\blue196",
+      "black" => "\\red0\\green0\\blue0",
+      "blanchedalmond" => "\\red255\\green235\\blue205",
+      "blue" => "\\red0\\green0\\blue255",
+      "blueviolet" => "\\red138\\green43\\blue226",
+      "brown" => "\\red165\\green42\\blue42",
+      "burlywood" => "\\red222\\green184\\blue135",
+      "cadetblue" => "\\red95\\green158\\blue160",
+      "chartreuse" => "\\red127\\green255\\blue0",
+      "chocolate" => "\\red210\\green105\\blue30",
+      "coral" => "\\red255\\green127\\blue80",
+      "cornflowerblue" => "\\red100\\green149\\blue237",
+      "cornsilk" => "\\red255\\green248\\blue220",
+      "crimson" => "\\red220\\green20\\blue60",
+      "cyan" => "\\red0\\green255\\blue255",
+      "darkblue" => "\\red0\\green0\\blue139",
+      "darkcyan" => "\\red0\\green139\\blue139",
+      "darkgoldenrod" => "\\red184\\green134\\blue11",
+      "darkgray" => "\\red169\\green169\\blue169",
+      "darkgrey" => "\\red169\\green169\\blue169",
+      "darkgreen" => "\\red0\\green100\\blue0",
+      "darkkhaki" => "\\red189\\green183\\blue107",
+      "darkmagenta" => "\\red139\\green0\\blue139",
+      "darkolivegreen" => "\\red85\\green107\\blue47",
+      "darkorange" => "\\red255\\green140\\blue0",
+      "darkorchid" => "\\red153\\green50\\blue204",
+      "darkred" => "\\red139\\green0\\blue0",
+      "darksalmon" => "\\red233\\green150\\blue122",
+      "darkseagreen" => "\\red143\\green188\\blue143",
+      "darkslateblue" => "\\red72\\green61\\blue139",
+      "darkslategray" => "\\red47\\green79\\blue79",
+      "darkslategrey" => "\\red47\\green79\\blue79",
+      "darkturquoise" => "\\red0\\green206\\blue209",
+      "darkviolet" => "\\red148\\green0\\blue211",
+      "deeppink" => "\\red255\\green20\\blue147",
+      "deepskyblue" => "\\red0\\green191\\blue255",
+      "dimgray" => "\\red105\\green105\\blue105",
+      "dimgrey" => "\\red105\\green105\\blue105",
+      "dodgerblue" => "\\red30\\green144\\blue255",
+      "firebrick" => "\\red178\\green34\\blue34",
+      "floralwhite" => "\\red255\\green250\\blue240",
+      "forestgreen" => "\\red34\\green139\\blue34",
+      "fuchsia" => "\\red255\\green0\\blue255",
+      "gainsboro" => "\\red220\\green220\\blue220",
+      "ghostwhite" => "\\red248\\green248\\blue255",
+      "gold" => "\\red255\\green215\\blue0",
+      "goldenrod" => "\\red218\\green165\\blue32",
+      "gray" => "\\red128\\green128\\blue128",
+      "grey" => "\\red128\\green128\\blue128",
+      "green" => "\\red0\\green128\\blue0",
+      "greenyellow" => "\\red173\\green255\\blue47",
+      "honeydew" => "\\red240\\green255\\blue240",
+      "hotpink" => "\\red255\\green105\\blue180",
+      "indianred" => "\\red205\\green92\\blue92",
+      "indigo" => "\\red75\\green0\\blue130",
+      "ivory" => "\\red255\\green255\\blue240",
+      "khaki" => "\\red240\\green230\\blue140",
+      "lavender" => "\\red230\\green230\\blue250",
+      "lavenderblush" => "\\red255\\green240\\blue245",
+      "lawngreen" => "\\red124\\green252\\blue0",
+      "lemonchiffon" => "\\red255\\green250\\blue205",
+      "lightblue" => "\\red173\\green216\\blue230",
+      "lightcoral" => "\\red240\\green128\\blue128",
+      "lightcyan" => "\\red224\\green255\\blue255",
+      "lightgoldenrodyellow" => "\\red250\\green250\\blue210",
+      "lightgray" => "\\red211\\green211\\blue211",
+      "lightgrey" => "\\red211\\green211\\blue211",
+      "lightgreen" => "\\red144\\green238\\blue144",
+      "lightpink" => "\\red255\\green182\\blue193",
+      "lightsalmon" => "\\red255\\green160\\blue122",
+      "lightseagreen" => "\\red32\\green178\\blue170",
+      "lightskyblue" => "\\red135\\green206\\blue250",
+      "lightslategray" => "\\red119\\green136\\blue153",
+      "lightslategrey" => "\\red119\\green136\\blue153",
+      "lightsteelblue" => "\\red176\\green196\\blue222",
+      "lightyellow" => "\\red255\\green255\\blue224",
+      "lime" => "\\red0\\green255\\blue0",
+      "limegreen" => "\\red50\\green205\\blue50",
+      "linen" => "\\red250\\green240\\blue230",
+      "magenta" => "\\red255\\green0\\blue255",
+      "maroon" => "\\red128\\green0\\blue0",
+      "mediumaquamarine" => "\\red102\\green205\\blue170",
+      "mediumblue" => "\\red0\\green0\\blue205",
+      "mediumorchid" => "\\red186\\green85\\blue211",
+      "mediumpurple" => "\\red147\\green112\\blue219",
+      "mediumseagreen" => "\\red60\\green179\\blue113",
+      "mediumslateblue" => "\\red123\\green104\\blue238",
+      "mediumspringgreen" => "\\red0\\green250\\blue154",
+      "mediumturquoise" => "\\red72\\green209\\blue204",
+      "mediumvioletred" => "\\red199\\green21\\blue133",
+      "midnightblue" => "\\red25\\green25\\blue112",
+      "mintcream" => "\\red245\\green255\\blue250",
+      "mistyrose" => "\\red255\\green228\\blue225",
+      "moccasin" => "\\red255\\green228\\blue181",
+      "navajowhite" => "\\red255\\green222\\blue173",
+      "navy" => "\\red0\\green0\\blue128",
+      "oldlace" => "\\red253\\green245\\blue230",
+      "olive" => "\\red128\\green128\\blue0",
+      "olivedrab" => "\\red107\\green142\\blue35",
+      "orange" => "\\red255\\green165\\blue0",
+      "orangered" => "\\red255\\green69\\blue0",
+      "orchid" => "\\red218\\green112\\blue214",
+      "palegoldenrod" => "\\red238\\green232\\blue170",
+      "palegreen" => "\\red152\\green251\\blue152",
+      "paleturquoise" => "\\red175\\green238\\blue238",
+      "palevioletred" => "\\red219\\green112\\blue147",
+      "papayawhip" => "\\red255\\green239\\blue213",
+      "peachpuff" => "\\red255\\green218\\blue185",
+      "peru" => "\\red205\\green133\\blue63",
+      "pink" => "\\red255\\green192\\blue203",
+      "plum" => "\\red221\\green160\\blue221",
+      "powderblue" => "\\red176\\green224\\blue230",
+      "purple" => "\\red128\\green0\\blue128",
+      "rebeccapurple" => "\\red102\\green51\\blue153",
+      "red" => "\\red255\\green0\\blue0",
+      "rosybrown" => "\\red188\\green143\\blue143",
+      "royalblue" => "\\red65\\green105\\blue225",
+      "saddlebrown" => "\\red139\\green69\\blue19",
+      "salmon" => "\\red250\\green128\\blue114",
+      "sandybrown" => "\\red244\\green164\\blue96",
+      "seagreen" => "\\red46\\green139\\blue87",
+      "seashell" => "\\red255\\green245\\blue238",
+      "sienna" => "\\red160\\green82\\blue45",
+      "silver" => "\\red192\\green192\\blue192",
+      "skyblue" => "\\red135\\green206\\blue235",
+      "slateblue" => "\\red106\\green90\\blue205",
+      "slategray" => "\\red112\\green128\\blue144",
+      "slategrey" => "\\red112\\green128\\blue144",
+      "snow" => "\\red255\\green250\\blue250",
+      "springgreen" => "\\red0\\green255\\blue127",
+      "steelblue" => "\\red70\\green130\\blue180",
+      "tan" => "\\red210\\green180\\blue140",
+      "teal" => "\\red0\\green128\\blue128",
+      "thistle" => "\\red216\\green191\\blue216",
+      "tomato" => "\\red255\\green99\\blue71",
+      "turquoise" => "\\red64\\green224\\blue208",
+      "violet" => "\\red238\\green130\\blue238",
+      "wheat" => "\\red245\\green222\\blue179",
+      "white" => "\\red255\\green255\\blue255",
+      "whitesmoke" => "\\red245\\green245\\blue245",
+      "yellow" => "\\red255\\green255\\blue0",
+      "yellowgreen" => "\\red154\\green205\\blue50");
+
+    $css = strtolower(trim($css));
+    if (array_key_exists($css, $css_color_names)) {
+      $color = $css_color_names[$css];
+    }
+  }
+  
+  if ($color == "") {
+    return 0;
+  }
+  
+  if (!array_key_exists($color, $bookrtf_colortbl)) {
+     $bookrtf_colortbl[$color] = count($bookrtf_colortbl)+1;
+  }
+  return $bookrtf_colortbl[$color];  
+}
+
+/**
+ * Convert CSS length to RTF's twips
  *
  * @param css 
  *   The value in CSS, this is a string with the value and unit
