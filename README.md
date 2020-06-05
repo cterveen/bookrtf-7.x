@@ -6,12 +6,12 @@ concept/demo for the book I'm working with. It's working, but assumes a
 pretty standard document. It has been based on the HTML output of FCKEditor.
 
 **Currently features**
-- Basic HTML elements: p, h1, h2, h3, li, tbody, td, th, br, img
+- Basic HTML elements: p, h1, h2, h3, ul (li) ol (li), tbody (td, th), br, img
   - Images are scaled to A4 page width, png, possibly jpg/jpeg (not tested)
   - Tables are scaled to A4 page width, some adaptation in column width
   - Lists can be nested
   - Links are changed to footnotes.
-- Basic HTML markup: b u i
+- Basic HTML markup: b u i sup sub
 - CSS support for lay-out
   - Custom css files can be added to your theme directory
 - Fancy lay-out
@@ -20,8 +20,7 @@ pretty standard document. It has been based on the HTML output of FCKEditor.
   - Flyleaf (optional)
   - Table of contents (optional)
   - Index (from the anchor module, optional)
-  - Page headers
-  - Page number
+  - Page headers and footers (facing pages; configurable: none, book title, chapter title, page number)
 
 **Dependencies:**
 - Drupal modules
@@ -58,7 +57,8 @@ Supported properties \[values]:
 - font-size \[cm mm in px pt pc]
 - font-weight \["bold", "normal"]
 - text-align \["left", "right", "center", "justify"]
+- color \[rgb(), #, color name]
    
-Note that values should be in css format including the unit. These will be
-converted to rtf units and rounded to whole units. Supported values are
-mentioned between square brackets behind the property. */
+Note that values and colors should be in css format, this includes unit or
+type specification. All values will be converted to rtf appropriate values.
+Supported values are mentioned between square brackets behind the property.
