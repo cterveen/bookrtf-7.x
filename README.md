@@ -6,13 +6,12 @@ concept/demo for the book I'm working with. It's working, but assumes a
 pretty standard document. It has been based on the HTML output of FCKEditor.
 
 **Currently features**
-- Basic HTML elements: p, h1, h2, h3, ul (li) ol (li), tbody (td, th), br, img
+- Basic HTML elements: p, h1, h2, h3, li (ol, ul), tbody (td, th), br, img
   - Images are scaled to A4 page width, png, possibly jpg/jpeg (not tested)
   - Tables are scaled to A4 page width, some adaptation in column width
   - Lists can be nested
-  - Links are changed to footnotes.
-- Basic HTML markup: b u i sup sub span
-  - The span replacement [always] ends with a space
+  - Links are changed to footnotes
+- Basic HTML markup: strong u i sup sub span
 - CSS support for lay-out
   - Custom css files can be added to your theme directory
 - Fancy lay-out
@@ -38,7 +37,6 @@ pretty standard document. It has been based on the HTML output of FCKEditor.
     - Store in libraries://schepp-css-parser/
 
 **CSS support:**
-
 - A custom css file can be placed in theme://css/rtf.css
 - The style is determined by:
   1. style attribute (can be turned off)
