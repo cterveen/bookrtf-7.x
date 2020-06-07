@@ -28,37 +28,26 @@ pretty standard document. It has been based on the HTML output of FCKEditor.
   - libraries
 - External libraries
   - simple HTML DOM: https://simplehtmldom.sourceforge.io/
+    - Store in libraries://simple_html_dom/
   - css parser: https://github.com/Schepp/CSS-Parser
+    - Store in libraries://schepp-css-parser/
+    - Only needs parser.php
 
 **CSS support:**
 
-Supported elements:
-- body
-- p
-- h1
-- h2
-- h3
-- li
-- td 
-- th
-   
-Supported classes: 
-- .header-left
-- .header-right
-- .footer-left
-- .footer-right
-   
-Supported properties \[values]:
-- margin-top \[cm mm in px pt pc]
-- margin-right \[cm mm in px pt pc]
-- margin-bottom \[cm mm in px pt pc]
-- margin-left \[cm mm in px pt pc]
-- font-family \[first value only]
-- font-size \[cm mm in px pt pc]
-- font-weight \["bold", "normal"]
-- text-align \["left", "right", "center", "justify"]
-- color \[rgb(), #, color name]
-   
-Note that values and colors should be in css format, this includes unit or
-type specification. All values will be converted to rtf appropriate values.
-Supported values are mentioned between square brackets behind the property.
+- A custom css file can be placed in theme/css/rtf.css
+- Supported elements: body, p, h1, h2, h3, li, td, th
+- Used classes: .header-left .header-right .footer-left .footer-right
+- Supported properties:
+  - margin-top \[cm mm in px pt pc]
+  - margin-right \[cm mm in px pt pc]
+  - margin-bottom \[cm mm in px pt pc]
+  - margin-left \[cm mm in px pt pc]
+  - font-family \[first value only]
+  - font-size \[cm mm in px pt pc]
+  - font-weight \["bold", "normal"]
+  - text-align \["left", "right", "center", "justify"]
+  - color \[rgb(), #, color name]
+- Note that values and colors should be in css format, this includes unit or
+  type specification. All values will be converted to rtf appropriate values.
+  Supported values are mentioned between square brackets behind the property.
