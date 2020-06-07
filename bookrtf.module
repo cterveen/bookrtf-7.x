@@ -110,6 +110,11 @@ function bookrtf_form($form, &$form_state) {
     '#required' => FALSE,
   );
   
+  $form['bookrtf_style_from_attribute'] = array(
+    '#type' => 'checkbox',
+    '#title' => 'Use style attribute of the element',
+    '#default_value' => variable_get('bookrtf_style_from_attribute', 1),
+    '#description' => t('By default the style specified in the style attribute of the element is used. However, this usually is specified for the website and in the print version a different style can be prefered. By turning this setting off all styles set in the style attribute are ignored.'),);
   
   $form['bookrtf_front'] = array(
     '#type' => 'checkbox',
@@ -917,6 +922,18 @@ function bookrtf_traverse ($elements, $base_url) {
       case 'p':
         $e->outertext = "{\\pard " . bookrtf_get_style($e) . $e->innertext . "\\par}\r\n";
         break;
+      case 'span':
+        $e->outertext = "{" . bookrtf_get_style($e) . $e->innertext;
+        /* my wysiwig editor moves the span to a separate line, herewith the
+         * white space after the <span> is lost, whitespace before <span> is
+         * automatically added? I have to find a better way to deal with white
+         * space!
+         */
+        if (substr($e->innertext, -1) != " ") {
+          $e->outertext .= " ";
+        }
+        $e->outertext .= "}\r\n";
+        break;
       case 'strong': 
         $e->outertext = "{\\b " . $e->innertext . "}";
         break;
@@ -1100,23 +1117,74 @@ function bookrtf_get_style($e) {
   # start the cascade
   while ($e) {
     # get css from the element attribute
-    
-    # get css from the element class
+    $style = $e->style;
+    if ($style != "" & variable_get('bookrtf_style_from_attribute', 1)) {
+      $style = ".attribute {" . $style . " }";
+      $css_parser = new CssParser();
+      $css_parser->load_string($style);
+      $css_parser->parse();
+      $my_css = $css_parser->parsed;
+      
+      foreach (array_keys($my_css["main"][".attribute"]) as $property) {
+        // inheritance by default
+        if (!array_key_exists($property, $css) & ($level == 0 | array_key_exists($property, $css_inherit))) {
+          $css[$property] = $my_css["main"][".attribute"][$property];
+        }
+        // inheritance by setting
+        if (array_key_exists($property, $css)) {
+          if (trim($css[$property]) == "inherit") {
+            $css[$property] = $my_css["main"][".attribute"][$property];
+          }
+        }
+      }
+    }
     
     # get css from the element id
+    $id = "#" . $e->id;
+    if (array_key_exists($id, $bookrtf_css)) {
+      foreach (array_keys($bookrtf_css[$id]) as $property) {
+        // inheritance by default
+        if (!array_key_exists($property, $css) & ($level == 0 | array_key_exists($property, $css_inherit))) {
+          $css[$property] = $bookrtf_css[$id][$property];
+        }
+        // inheritance by setting
+        if (array_key_exists($property, $css)) {
+          if (trim($css[$property]) == "inherit") {
+            $css[$property] = $bookrtf_css[$id][$property];
+          }
+        }
+      }
+    }
+    
+    # get css from the element class
+    $class = "." . $e->class;
+    if (array_key_exists($class, $bookrtf_css)) {
+      foreach (array_keys($bookrtf_css[$class]) as $property) {
+        // inheritance by default
+        if (!array_key_exists($property, $css) & ($level == 0 | array_key_exists($property, $css_inherit))) {
+          $css[$property] = $bookrtf_css[$class][$property];
+        }
+        // inheritance by setting
+        if (array_key_exists($property, $css)) {
+          if (trim($css[$property]) == "inherit") {
+            $css[$property] = $bookrtf_css[$class][$property];
+          }
+        }
+      }
+    }
     
     # get css associated with the element
     $tag = $e->tag;
     if (array_key_exists($tag, $bookrtf_css)) {
-      foreach (array_keys($bookrtf_css[$tag]) as $key) {
+      foreach (array_keys($bookrtf_css[$tag]) as $property) {
         // inheritance by default
-        if (!array_key_exists($key, $css) & ($level == 0 | array_key_exists( $key, $css_inherit))) {
-          $css[$key] = $bookrtf_css[$tag][$key];
+        if (!array_key_exists($property, $css) & ($level == 0 | array_key_exists($property, $css_inherit))) {
+          $css[$property] = $bookrtf_css[$tag][$property];
         }
         // inheritance by setting
-        if (array_key_exists($key, $css)) {
-          if (trim($css[$key]) == "inherit") {
-            $css[$key] = $bookrtf_css[$tag][$key];
+        if (array_key_exists($property, $css)) {
+          if (trim($css[$property]) == "inherit") {
+            $css[$property] = $bookrtf_css[$tag][$property];
           }
         }
       }
