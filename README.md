@@ -11,7 +11,8 @@ pretty standard document. It has been based on the HTML output of FCKEditor.
   - Tables are scaled to A4 page width, some adaptation in column width
   - Lists can be nested
   - Links are changed to footnotes.
-- Basic HTML markup: b u i sup sub
+- Basic HTML markup: b u i sup sub span
+  - The span replacement [always] ends with a space
 - CSS support for lay-out
   - Custom css files can be added to your theme directory
 - Fancy lay-out
@@ -27,17 +28,29 @@ pretty standard document. It has been based on the HTML output of FCKEditor.
   - book
   - libraries
 - External libraries
-  - simple HTML DOM: https://simplehtmldom.sourceforge.io/
+  - Simple HTML DOM 
+    - Available from https://simplehtmldom.sourceforge.io/
+    - Files: simle_html_dom.php
     - Store in libraries://simple_html_dom/
-  - css parser: https://github.com/Schepp/CSS-Parser
+  - CSS Parser: 
+    - Available from https://github.com/Schepp/CSS-Parser 
+    - Files: parser.php
     - Store in libraries://schepp-css-parser/
-    - Only needs parser.php
 
 **CSS support:**
 
-- A custom css file can be placed in theme/css/rtf.css
-- Supported elements: body, p, h1, h2, h3, li, td, th
-- Used classes: .header-left .header-right .footer-left .footer-right
+- A custom css file can be placed in theme://css/rtf.css
+- The style is determined by:
+  1. style attribute (can be turned off)
+  2. id
+  3. class
+  4. element
+  5. parents
+- Supported elements: body, p, h1, h2, h3, li, td, th, span
+  - The style of other elements will be used in the parental cascade
+  - The span replacement always ends with a space!
+- Classes used by bookrtf: .header-left .header-right .footer-left .footer-right
+  - These define the lay-out of the headers and footers  
 - Supported properties:
   - margin-top \[cm mm in px pt pc]
   - margin-right \[cm mm in px pt pc]
