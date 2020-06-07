@@ -292,8 +292,14 @@ function bookrtf_convert($content, $base_url) {
   // put some html tags around it so we can push it into the html converter.
   $content = "<html><body>" . $content . "</body></html>";
   
-  // CLEAN UP spaces after newlines.
-  $content = preg_replace("|\s+([\r\n]+)\s+|", "$1", $content);
+  // HTML considers all whitespace and newlines as ONE space
+  $content = preg_replace("|[\s\r\n]+|", " ", $content);
+  // Drupal also places some unneccesary newlines or whitespace between HTML
+  // elements which show up in RTF.
+  foreach (array("td", "p", "li", "div", "h1", "h2", "h3", "ol", "ul") as $element) {
+    $content = preg_replace("|<\/".$element."> <|", "</".$element."><", $content);
+    $content = preg_replace("|> <".$element."|", "><".$element, $content);  
+  }
   
   // style
   global $bookrtf_css;
@@ -366,7 +372,7 @@ function bookrtf_convert($content, $base_url) {
   }
   else {
     foreach (array_keys($bookrtf_fonttbl) as $font) {
-      $header .= "{\\f" . $bookrtf_fonttbl[$font] . " " . $font . ";}";
+      $header .= "{\\f" . $bookrtf_fonttbl[$font] . "\\fnil " . $font . ";}";
     }
   }
   $header .= "}\r\n";
@@ -376,8 +382,7 @@ function bookrtf_convert($content, $base_url) {
       $header .= " " . $color . ";";
     }
     $header .= "}\r\n";
-  }
-  
+  }  
   
   $header .= "\\vertdoc\\paperh16834\\paperw11909\r\n";
   $header .= "\\fet0\\facingp\\ftnbj\\ftnrstpg\\widowctrl\r\n";
@@ -510,12 +515,7 @@ function bookrtf_convert($content, $base_url) {
   
   // FINAL DOCUMENT
   $content = "{" . $header . "\r\n" . $content . "\r\n" . $footer . "}";
-  
-  // remove whitespaces around newlines
-  $content = preg_replace("|\s+([\r\n]+)\s+|", "$1", $content);
-  // TODO: sometimes an extra space is added in table cells that contain lists, find out why
-  $content = preg_replace_callback("|\\intbl{([^\s]+)\s+{|", function($m) { return "intbl{". $m[1] ."{";}, $content);
-  
+    
   // SPECIAL CHARACTERS
   // extended ascii
   $content = preg_replace("|€|", "\'80", $content);
@@ -923,16 +923,7 @@ function bookrtf_traverse ($elements, $base_url) {
         $e->outertext = "{\\pard " . bookrtf_get_style($e) . $e->innertext . "\\par}\r\n";
         break;
       case 'span':
-        $e->outertext = "{" . bookrtf_get_style($e) . $e->innertext;
-        /* my wysiwig editor moves the span to a separate line, herewith the
-         * white space after the <span> is lost, whitespace before <span> is
-         * automatically added? I have to find a better way to deal with white
-         * space!
-         */
-        if (substr($e->innertext, -1) != " ") {
-          $e->outertext .= " ";
-        }
-        $e->outertext .= "}\r\n";
+        $e->outertext = "{" . bookrtf_get_style($e) . $e->innertext . "}";
         break;
       case 'strong': 
         $e->outertext = "{\\b " . $e->innertext . "}";
