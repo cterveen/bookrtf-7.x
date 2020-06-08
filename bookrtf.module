@@ -292,13 +292,10 @@ function bookrtf_convert($content, $base_url) {
   // put some html tags around it so we can push it into the html converter.
   $content = "<html><body>" . $content . "</body></html>";
   
-  // HTML considers all whitespace and newlines as ONE space
-  $content = preg_replace("|[\s\r\n]+|", " ", $content);
-  // Drupal also places some unneccesary newlines or whitespace between HTML
-  // elements which show up in RTF.
+  // Remove white-space between structural elements
   foreach (array("td", "p", "li", "div", "h1", "h2", "h3", "ol", "ul") as $element) {
-    $content = preg_replace("|<\/".$element."> <|", "</".$element."><", $content);
-    $content = preg_replace("|> <".$element."|", "><".$element, $content);  
+    $content = preg_replace("|<\/".$element.">[\s\r\n]+<|", "</".$element."><", $content);
+    $content = preg_replace("|>[\s\r\n]+<".$element."|", "><".$element, $content);  
   }
   
   // style
@@ -427,7 +424,7 @@ function bookrtf_convert($content, $base_url) {
       $header .= "\\sect\\sftnrstpg\r\n";
     }
     
-    $header .= "{\\pard " .  bookrtf_get_style($toc[0]) . "Inhoud\r\n";
+    $header .= "{\\pard " .  bookrtf_css2rtf(bookrtf_get_style($toc[0])) . "Inhoud\r\n";
     $header .= "\\par}\r\n{\\pard {";
         
     // remove the first title as this should be the title of the book and does not belong in the toc.
@@ -467,7 +464,7 @@ function bookrtf_convert($content, $base_url) {
     $footer .= "{\\headerr\\pard\\qr Index\\par}\r\n";
     $footer .= "{\\footerr\\pard\\qr \\chpgn \\par}\r\n";
     $footer .= "{\\footerl\\pard\\ql \\chpgn \\par}\r\n";
-    $footer .= "{\\pard " . bookrtf_get_style($toc[0]);
+    $footer .= "{\\pard " . bookrtf_css2rtf(bookrtf_get_style($toc[0]));
     $footer .= "{\\*\\bkmkstart chapterIndex}{\\*\\bkmkend chapterIndex}Index";
     $footer .= "\\par}\r\n";
     $footer .= "\\sect \\sbknone \\cols2\r\n";  
@@ -790,15 +787,16 @@ function bookrtf_traverse ($elements, $base_url) {
           $chapter = $match[1];
           $rtf .= "{\\*\\bkmkstart chapter".$chapter."}{\\*\\bkmkend chapter".$chapter."}\r\n";
         }
-        $rtf .= "{\\pard " . bookrtf_get_style($e) . $title . "\\par}\r\n";
+        $rtf .= "{\\pard\\keepn " . bookrtf_css2rtf(bookrtf_get_style($e)) . $title . "\\par}\r\n";
         
         $e->outertext = $rtf;
         break;
       case 'h2':
-        $e->outertext = "{\\pard\\keepn " . bookrtf_get_style($e) . $e->innertext . "\\par}\r\n";
-        break;
-      case 'h3': 
-        $e->outertext = "{\\pard " . bookrtf_get_style($e) . $e->innertext . "\\par}\r\n";     
+      case 'h3':
+      case 'h4':
+      case 'h5':
+      case 'h6':
+        $e->outertext = "{\\pard\\keepn " . bookrtf_css2rtf(bookrtf_get_style($e)) . $e->innertext . "\\par}\r\n";
         break;
       case 'i': 
         $e->outertext = "{\\i " . $e->innertext . "}";
@@ -819,7 +817,7 @@ function bookrtf_traverse ($elements, $base_url) {
         $height = imagesy($img);
         $ratio = $width/$height;
         
-        // asume full page width A4 - margins = 9028 - XX  = 8309 twips
+        // asume full page width A4 - margins = 11909 - 2x1800  = 8309 twips
         $picwidth = 8309;
         $picheight = round($picwidth / $ratio);
         $scalex = 100;
@@ -891,7 +889,7 @@ function bookrtf_traverse ($elements, $base_url) {
         if ($level > 1 & $number == 1) {
           $rtf .= "\\par}\r\n";
         }
-        $rtf .= "{\\pard " . bookrtf_get_style($e);
+        $rtf .= "{\\pard " . bookrtf_css2rtf(bookrtf_get_style($e));
         
         $firstindent = -360;
         $lineindent = 720 * $level;
@@ -920,13 +918,20 @@ function bookrtf_traverse ($elements, $base_url) {
         $e->outertext = $rtf;
         break;
       case 'p':
-        $e->outertext = "{\\pard " . bookrtf_get_style($e) . $e->innertext . "\\par}\r\n";
+        $e->outertext = "{\\pard " . bookrtf_css2rtf(bookrtf_get_style($e)) . $e->innertext . "\\par}\r\n";
         break;
+      case 's':
+      case 'del':
+      case 'ins':
       case 'span':
-        $e->outertext = "{" . bookrtf_get_style($e) . $e->innertext . "}";
+        $e->outertext = "{" . bookrtf_css2rtf(bookrtf_get_style($e)) . $e->innertext . "}";
         break;
       case 'strong': 
+      case 'b':  
         $e->outertext = "{\\b " . $e->innertext . "}";
+        break;
+      case 'strike':
+        $e->outertext = "{\\strike " . $e->innertext . "}";
         break;
       case 'sub':
         $e->outertext = "{\\sub " . $e->innertext . "}";
@@ -940,9 +945,7 @@ function bookrtf_traverse ($elements, $base_url) {
          * confident working backwards from cells. Better to store the whole
          * table and than put it down again.
          */
-         
-        $width_in_twips = 8309;
-        $width_in_pixels = 600;
+        
         $num_rows = 0;
         $num_cols = 0;
         $table;
@@ -972,23 +975,12 @@ function bookrtf_traverse ($elements, $base_url) {
               $table[$num_rows][$cur_cols]['colspan'] = 1;
             }
             
-            // Does using regexp for css also spawn demons?
-            if ($c->style) {
-              $style = array();
-              preg_match_all("/([\w\-]+):\s([\w\s\-]+);?/", $c->style, $matches);
-              
-              for ($pid = 0; $pid < count($matches[0]); $pid++) {
-                $style[$matches[1][$pid]] = $matches[2][$pid];
-              }
-              
-              if(array_key_exists("width", $style)) {
-                // asume width in pixels -> make percentage.
-                if (substr($style['width'], -2) == "px") {
-                  $width = substr($style['width'], 0, -2);
-                  $colwidth[$cur_cols] = $width / $width_in_pixels;
-                }                
-              }
-            }
+            $css = bookrtf_get_style($c);
+            $table[$num_rows][$cur_cols]['style'] = $css;
+            
+            if (array_key_exists("width", $css)) {
+              $colwidth[$cur_cols] = bookrtf_convert_length($css["width"]);
+            }            
             
             // correct cur_cols for colspan.
             $cur_cols += $table[$num_rows][$cur_cols]['colspan']-1;
@@ -998,7 +990,12 @@ function bookrtf_traverse ($elements, $base_url) {
           }
         }
         
-        // some complicated stuff to calculate column widths
+        /**
+         * Calculate column width
+         * 1. Determined width already defined
+         * 2. Space out evenly over the remaining columns
+         */
+         
         $colright = array();
         $widthdefined = 0;
         $auto = 0;
@@ -1010,7 +1007,9 @@ function bookrtf_traverse ($elements, $base_url) {
             $auto++;
           }
         }
-        $autowidth = (1 - $widthdefined)/$auto;
+        
+        // standard pagewidth = 13909 - 2x1800 = 9309
+        $autowidth = (9309 - $widthdefined)/$auto;
         
         $colleft = 0;
         for ($col = 1; $col <= $num_cols; $col++) {
@@ -1020,19 +1019,67 @@ function bookrtf_traverse ($elements, $base_url) {
           else {
             $colleft += $autowidth;
           }
-          $colright[$col] = $colleft;
+          $colright[$col] = ceil($colleft);
         }
         
         // now we have the info start building it up again
         $rtf = "{";
         foreach ($table as $row) {
-          $rtf .= "\\trowd";
+          $rtf .= "\\trowd\r\n";
+          
           foreach ($row as $cell) {
+                    // add the borders here
+            foreach (array("border-top", "border-right", "border-bottom", "border-left") as $border) {
+            
+              if (array_key_exists($border . "-width", $cell["style"])) {
+                $rtf .= "\\clbrdr" . substr($border, 7, 1);
+                $rtf .= "\\brdrw" . bookrtf_convert_length($cell["style"][$border . "-width"]);
+                if (array_key_exists($border . "-style", $cell["style"])) {
+                  switch(trim($cell["style"][$border . "-style"])) {
+                    case "dotted":
+                      $rtf .= "\\brdrdot ";
+                      break;
+                    case "dashed":
+                      $rtf .= "\\brdrdash ";
+                      break;
+                    case "double":
+                      $rtf .= "\\brdrdb ";
+                      break;
+                    case "hidden":
+                    case "none":
+                      $rtf .= "\\brdrnone ";
+                      break;
+                    default:
+                      $rtf .= "\\brdrs ";
+                      break;
+                  }
+                }
+                else {
+                  $rtf .= "\\brdrs ";
+                }                
+              }
+            }
+            
+            if (array_key_exists("vertical-align", $cell["style"])) {
+              switch (trim($cell["style"]["vertical-align"])) {
+                case "top":
+                  $rtf .= "\\clvertalt";
+                  break;
+                case "middle":
+                  $rtf .= "\\clvertalc";
+                  break;
+                case "bottom":
+                  $rtf .= "\\clvertalb";
+                  break;
+              }
+            }
+          
             $rtf .= "\\cellx";
-            $rtf .= floor($width_in_twips * $colright[$cell['col']+$cell['colspan']-1]);
+            $rtf .= $colright[$cell['col']+$cell['colspan']-1];
+            $rtf .= "\r\n";
           }
           foreach ($row as $cell) {
-            $rtf .= "\\intbl{" . bookrtf_get_style($cell['element']) . $cell['innertext'] . "}\\cell\r\n";
+            $rtf .= "\\intbl{" . bookrtf_css2rtf($cell['style']) . $cell['innertext'] . "}\\cell\r\n";
           }
           $rtf .= "\\row\r\n";
         }
@@ -1044,7 +1091,18 @@ function bookrtf_traverse ($elements, $base_url) {
         $e->outertext = "";
         break;
       case 'u':
-        $e->outertext = "{\\ul " . $e->innertext . "}";
+        // switch to css to get the correct style (and color?);
+        $css = bookrtf_get_style($e);
+        if (!array_key_exists("text-decoration", $css)) {
+          $css["text-decoration"] = "underline";
+        }
+        else {
+          if (!preg_match("|underline|", $css["text-decoration"])) {
+            $css["text-decoration"] = $css["text-decoration"] . " underline";
+          }
+        }
+        
+        $e->outertext = "{" . bookrtf_css2rtf($css) . $e->innertext . "}";
         break;
     }
   }
@@ -1184,7 +1242,7 @@ function bookrtf_get_style($e) {
     $level++;
   }
   
-  return bookrtf_css2rtf($css);
+  return $css;
 }
 
 /**
@@ -1204,7 +1262,7 @@ function bookrtf_css2rtf($css) {
 
   $rtf = "";
   
-  
+  // use a bunch of if statements rather than switch to group tags
   if (array_key_exists("margin-top", $css)) {
     $rtf .= "\\sb". bookrtf_convert_length($css["margin-top"]);
   }
@@ -1235,11 +1293,9 @@ function bookrtf_css2rtf($css) {
     }
   }
   if (array_key_exists("font-family", $css)) {
-    $r = array();
     // In css a family of fonts is given, if the first is not available the 
-    // second is tried etc. I'm not sure how rtf / word processors handle that.
-    // Just pick the first one and hope for the best.
-    
+    // second is tried etc. RTF doesn't seem to support this so pick the first    
+    $r = array();    
     preg_match("|^([^,]+),?|", $css["font-family"], $r);
     $font = trim($r[1]);
     $font = preg_replace("|\"|", "", $font);
@@ -1269,7 +1325,52 @@ function bookrtf_css2rtf($css) {
       $rtf .= "\\cf" . $color;
     }
   }
-  
+  if (array_key_exists("text-decoration", $css)) {
+    // multiple values are accepted
+    $values = explode(" ", trim($css["text-decoration"]));
+    foreach ($values as $v) {
+      switch(trim($v)) {
+        case "line-through":
+          $rtf .= "\\strike";
+          break;
+        case "underline":
+          if (array_key_exists("text-decoration-style", $css)) {
+            switch(trim($css["text-decoration-style"])) {
+              case "initial":
+              case "inherit":
+              case "solid":
+                $rtf .= "\\ul";
+                break;
+              case "double":
+                $rtf .= "\\uldb";
+                break;
+              case "dotted":
+                $rtf .= "\\uld";
+                break;
+              case "dashed":
+                $rtf .= "\\uldash";
+                break;
+              case "wavy":
+                $rtf .= "\\ulwave";
+                break;
+              default:
+                $rtf .= "\\ul";
+                break;
+            }
+          }
+          else {
+            $rtf .= "\\ul";
+          }
+          break;
+        case "none":
+          $rtf .= "";
+          break;
+      }
+    }
+  }
+  if (array_key_exists("text-decoration-color", $css)) {
+    $rtf .= "\\ulc" . bookrtf_convert_color($css["text-decoration-color"]);
+  }  
   if (strlen($rtf) > 0) {
     $rtf .= " ";
   }
