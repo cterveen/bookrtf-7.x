@@ -8,19 +8,20 @@ pretty standard document. It has been based on the HTML output of FCKEditor.
 **Currently features**
 - Basic HTML elements: p, h1, h2, h3, li (ol, ul), tbody (td, th), br, img
   - Images are scaled to A4 page width, png, possibly jpg/jpeg (not tested)
-  - Tables are scaled to A4 page width, some adaptation in column width
+  - Tables are scaled to A4 page width, column width can be set in CSS
   - Lists can be nested
   - Links are changed to footnotes
-- Basic HTML markup: strong u i sup sub span
+- Basic HTML markup: b strong u i sup sub span ins del s strike
 - CSS support for lay-out
-  - Custom css files can be added to your theme directory
+  - A custom css file can be added to your theme directory
 - Fancy lay-out
   - Chapters start on new pages
   - Custom front page (optional)
   - Flyleaf (optional)
   - Table of contents (optional)
   - Index (from the anchor module, optional)
-  - Page headers and footers (facing pages; configurable: none, book title, chapter title, page number)
+  - Page headers and footers (facing pages; configurable: none, book title,
+    chapter title, page number)
 
 **Dependencies:**
 - Drupal modules
@@ -44,21 +45,30 @@ pretty standard document. It has been based on the HTML output of FCKEditor.
   3. class
   4. element
   5. parents
-- Supported elements: body, p, h1, h2, h3, li, td, th, span
-  - The style of other elements will be used in the parental cascade
-  - The span replacement always ends with a space!
+- Supported elements: body, p, h1, h2, h3, h4, h5, h6, li, td, th, span, ins, del, s
+  - The style of other elements (e.g. div) will be used in the parental cascade
 - Classes used by bookrtf: .header-left .header-right .footer-left .footer-right
-  - These define the lay-out of the headers and footers  
+  - These define the lay-out of the headers and footers
 - Supported properties:
-  - margin-top \[cm mm in px pt pc]
-  - margin-right \[cm mm in px pt pc]
-  - margin-bottom \[cm mm in px pt pc]
-  - margin-left \[cm mm in px pt pc]
+  - margin-* \[cm mm in px pt pc]
   - font-family \[first value only]
   - font-size \[cm mm in px pt pc]
-  - font-weight \["bold", "normal"]
-  - text-align \["left", "right", "center", "justify"]
+  - font-weight \[bold normal]
+  - text-align \[left right center justify]
   - color \[rgb(), #, color name]
+  - text-decoration \[line-through underline none]
+    - RTF does not support overstrike.
+  - text-decoration-color \[rgb() # color name]
+    - RTF only supports color definition for underline.
+    - Libre Office does not implement underline color from RTF.
+  - text-decoration-style \[solid double dashed dotted wavy]
+    - RTF only supports style for underline
+- Properties only applied in table cells \(td, th):
+  - border-\*-width \[cm mm in px pt pc]
+  - border-\*-style \[solid dotted dashed double none hidden]
+  - valign \[top middle bottom]
+  - width \[cm mm in px pt pc]
+    - Note that the default page width (ex. margins) is about 554 pixels
 - Note that values and colors should be in css format, this includes unit or
   type specification. All values will be converted to rtf appropriate values.
   Supported values are mentioned between square brackets behind the property.
