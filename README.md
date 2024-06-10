@@ -6,11 +6,9 @@ bookrtf-7.x
 
 bookrtf-7.x is a Drupal 7 module that exports a Drupal book or book page to RTF format. The module was build to export books to something printable and readable as the printer friendly version isn't really reader firendly. bookrtf-7.x creates an A4 document of the book or book page that contains elements such as a front page, table of contents, page numbers, chapter references etc. The module integrates with anchor-7.x to make a page referenced index. The lay-out is customizable through CSS.
 
-The module can be considered an alpha version. The coding was not brought to standards. The RTF document was tested in Microsoft Word en Libre Office writer. Options are available. A (useful) help page is not available, but some details are in help.md. Internationalisation and localisation is not available. The module is not in the Drupal module repository.
+The module can be considered an alpha version, but is being used and works well. The coding was not brought to standards. Some website specific parts are hardcoded. The RTF document was tested in Microsoft Word en Libre Office writer. Options are available. A (useful) help page is not available, but some details are in help.md. Internationalisation and localisation is not available. The module is not in the Drupal module repository.
 
-The project is currently being used and works well. Some website specific parts are however hardcoded and might need to be chaneged. Further development is not intended.
-
-The module has been ported to Drupal 9.x: [bookexportrtf-9.x](https://github.com/cterveen/bookexportrtf-9.x).
+No further development is intended. The module has been ported to Drupal 9.x: [bookexportrtf-9.x](https://github.com/cterveen/bookexportrtf-9.x).
 
 ## Installation
 
@@ -32,6 +30,8 @@ Settings can be found in the admin area. Help can be found in help.md
 
 ## Credits
 
+Written by Christiaan ter Veen <https://www.rork.nl/>
+
 Depends on:
 
 - Drupal <https://www.drupal.org/>
@@ -46,4 +46,4 @@ Technical details from:
 - W3Schools CSS Reference <https://www.w3schools.com/cssref/index.php>
 
 ## License
-To be decided
+To be decided, but consider it free to use, modify and distribute.
