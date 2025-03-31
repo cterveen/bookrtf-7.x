@@ -8,7 +8,7 @@ bookrtf-7.x is a Drupal 7 module that exports a Drupal book or book page to RTF 
 
 The module can be considered an alpha version, but is being used and works well. The coding was not brought to standards. Some website specific parts are hardcoded. The RTF document was tested in Microsoft Word en Libre Office writer. Options are available. A (useful) help page is not available, but some details are in help.md. Internationalisation and localisation is not available. The module is not in the Drupal module repository.
 
-No further development is intended. The module has been ported to Drupal 9.x: [bookexportrtf-9.x](https://github.com/cterveen/bookexportrtf-9.x).
+This module is archived. The module has been ported to Drupal 9.x: [bookexportrtf-9.x](https://github.com/cterveen/bookexportrtf-9.x).
 
 ## Installation
 
